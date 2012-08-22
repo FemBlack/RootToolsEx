@@ -11,12 +11,18 @@ import java.io.File;
 import java.io.IOException;
 
 /**
- * Created with IntelliJ IDEA.
- * User: ramdroid
- * Date: 8/16/12
- * Time: 6:17 AM
- * To change this template use File | Settings | File Templates.
- */
+ * Generates an error report and sends an intent to send it by email or another service of choice.
+ *
+ * In the most simple solution you just have to add a valid email address:
+ *
+ * ErrorReport report = new ErrorReport.Builder(context)
+ *          .setEmailAddress("your.email@gmail.com")
+ *          .build();
+ * report.send();
+ *
+ * There are more options like changing email subject/text, title of the chooser dialog.
+ * You can even choose a different log option. By default logcat is being used.
+ * */
 public class ErrorReport {
 
     public static final int ERROR_NONE                  = 0;
@@ -42,6 +48,143 @@ public class ErrorReport {
         logTool = builder.logTool;
         logParams = builder.logParams;
         logFile = builder.logFile;
+    }
+
+    /**
+     * Creates the error report and opens the intent chooser dialog.
+     *
+     * @return Returns 0 if successful, otherwise an error code.
+     */
+    public int send() {
+        int result = verify();
+        if (result == ERROR_NONE) {
+            result = createReport();
+        }
+        if (result == ERROR_NONE) {
+            sendIntent();
+        }
+        return result;
+    }
+
+    /**
+     * Builder to setup the options for the {@link ErrorReport} class.
+     */
+    public static class Builder {
+
+        private Context context;
+        private String chooserTitle;
+        private String emailAddress;
+        private String emailSubject;
+        private String emailText;
+        private String logTool;
+        private String logParams;
+        private String logFile;
+
+        public Builder(Context context) {
+            this.context = context;
+            initDefaults();
+        }
+
+        /**
+         * Set the title of the intent chooser dialog.
+         * If not title is set then the default title will be used.
+         *
+         * @param chooserTitle Chooser dialog title.
+         * @return Returns the {@link Builder}.
+         */
+        public Builder setChooserTitle(String chooserTitle) {
+            this.chooserTitle = chooserTitle;
+            return this;
+        }
+
+        /**
+         * Set the email address that receives the error report.
+         * This function is mandatory and needs to be called!
+         *
+         * @param emailAddress Email address of the receiver.
+         * @return Returns the {@link Builder}.
+         */
+        public Builder setEmailAddress(String emailAddress) {
+            this.emailAddress = emailAddress;
+            return this;
+        }
+
+        /**
+         * Set the email subject line.
+         * If not set then the default subject will be used.
+         *
+         * @param emailSubject
+         * @return Returns the {@link Builder}.
+         */
+        public Builder setEmailSubject(String emailSubject) {
+            this.emailSubject = emailSubject;
+            return this;
+        }
+
+        /**
+         * Set some text that appears in the email.
+         * If not set then the default text will be used.
+         *
+         * @param emailText
+         * @return Returns the {@link Builder}.
+         */
+        public Builder setEmailText(String emailText) {
+            this.emailText = emailText;
+            return this;
+        }
+
+        /**
+         * Set the tool that creates the error report.
+         * By default logcat is used.
+         *
+         * @param logTool An alternative binary file name
+         * @return Returns the {@link Builder}.
+         */
+        public Builder setLogTool(String logTool) {
+            this.logTool = logTool;
+            return this;
+        }
+
+        /**
+         * Set the parameters for the log tool.
+         * By default logcat is called with -d -v time
+         * -d means that logcat immediately returns when the log has been parsed.
+         * -v time means that the current time is added to each line.
+         * @param logParams The new parameters for the log tool.
+         * @return Returns the {@link Builder}.
+         */
+        public Builder setLogParams(String logParams) {
+            this.logParams = logParams;
+            return this;
+        }
+
+        /**
+         * Change the name of the log file that is send to the receiver.
+         * If not set then the default name will be used.
+         * @param logFile The new log file name.
+         * @return Returns the {@link Builder}.
+         */
+        public Builder setLogFile(String logFile) {
+            this.logFile = logFile;
+            return this;
+        }
+
+        /**
+         * @return Returns a configured {@link ErrorReport} class.
+         */
+        public ErrorReport build() {
+            return new ErrorReport(this);
+        }
+
+        private void initDefaults() {
+            chooserTitle = "Send error report";
+            emailSubject = "Error report by RootToolsEx";
+            emailText = "Hi there, here's my crash report!";
+            logTool = "logcat";
+            logParams = "-d -v time";
+            logFile = "errorlog.txt";
+        }
+
     }
 
     private String getOutputFile() {
@@ -106,81 +249,5 @@ public class ErrorReport {
             return ERROR_MISSING_EMAILADDRESS;
         }
         return ERROR_NONE;
-    }
-
-    public int send() {
-        int result = verify();
-        if (result == ERROR_NONE) {
-            result = createReport();
-        }
-        if (result == ERROR_NONE) {
-            sendIntent();
-        }
-        return result;
-    }
-
-    public static class Builder {
-
-        private Context context;
-        private String chooserTitle;
-        private String emailAddress;
-        private String emailSubject;
-        private String emailText;
-        private String logTool;
-        private String logParams;
-        private String logFile;
-
-        public Builder(Context context) {
-            this.context = context;
-            initDefaults();
-        }
-
-        private void initDefaults() {
-            chooserTitle = "Send error report";
-            emailSubject = "Error report by RootToolsEx";
-            emailText = "Hi there, here's my crash report!";
-            logTool = "logcat";
-            logParams = "-d -v time";
-            logFile = "errorlog.txt";
-        }
-
-        public Builder setChooserTitle(String chooserTitle) {
-            this.chooserTitle = chooserTitle;
-            return this;
-        }
-
-        public Builder setEmailAddress(String emailAddress) {
-            this.emailAddress = emailAddress;
-            return this;
-        }
-
-        public Builder setEmailSubject(String emailSubject) {
-            this.emailSubject = emailSubject;
-            return this;
-        }
-
-        public Builder setEmailText(String emailText) {
-            this.emailText = emailText;
-            return this;
-        }
-
-        public Builder setLogTool(String logTool) {
-            this.logTool = logTool;
-            return this;
-        }
-
-        public Builder setLogParams(String logParams) {
-            this.logParams = logParams;
-            return this;
-        }
-
-        public Builder setLogFile(String logFile) {
-            this.logFile = logFile;
-            return this;
-        }
-
-        public ErrorReport build() {
-            return new ErrorReport(this);
-        }
     }
 }
