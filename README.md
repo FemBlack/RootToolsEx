@@ -25,6 +25,7 @@ The `ErrorReport` class creates an error report that can be forwarded to the dev
                 .setEmailAddress("by-email-address-for-error-reports@gmail.com")
                 .setEmailSubject("App Quarantine error report")
                 .setEmailText("Hi ramdroid, here's my error report!")
+                .includeRunningProcesses()
                 .build();
         report.send();
 
