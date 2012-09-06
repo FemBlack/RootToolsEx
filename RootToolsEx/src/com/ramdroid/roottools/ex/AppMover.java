@@ -1,8 +1,10 @@
 package com.ramdroid.roottools.ex;
 
 import android.util.Log;
+import com.stericson.RootTools.Command;
 import com.stericson.RootTools.RootTools;
 import com.stericson.RootTools.RootToolsException;
+import com.stericson.RootTools.Shell;
 
 import java.io.File;
 import java.io.IOException;
@@ -43,6 +45,14 @@ public class AppMover {
     public static final int ERROR_INSUFFICIENT_SPACE    = 3;
     public static final int ERROR_REMOUNT_SYSTEM        = 4;
 
+    private static class ErrorCode {
+
+        ErrorCode(int value) {
+            this.value = value;
+        }
+        int value;
+    }
+
     /**
      * Check if an app is installed on a particular partition or not.
      *
@@ -57,7 +67,7 @@ public class AppMover {
      * @return the error code or ERROR_NONE if OK
      */
     public static int appExistsOnPartition(String packageName, String partition) {
-        int errorCode = ERROR_NOT_EXISTING;
+        final ErrorCode errorCode = new ErrorCode(ERROR_NOT_EXISTING);
         if (partition.equals(PARTITION_SYSTEM)) {
             File root = new File("/" + partition + "/app/");
             File[] files = root.listFiles();
@@ -65,38 +75,49 @@ public class AppMover {
                 for (File f : files) {
                     if (f.getName().contains(packageName)) {
                         Log.d(TAG, "Found " + f.getPath());
-                        errorCode = ERROR_NONE;
+                        errorCode.value = ERROR_NONE;
                         break;
                     }
                 }
             }
         }
-        else
-        {
-            try {
-                List<String> result = RootTools.sendShell("busybox ls /" + partition + "/app | grep " + packageName, -1);
-                Log.d(TAG, "Results: " + result.size());
-                for (String r : result) {
-                    Log.d(TAG, "Result " + r);
-                    if (r.contains(packageName)) {
-                        errorCode = ERROR_NONE;
+        else {
+            errorCode.value = appExistsOnPartitionWithRoot(packageName, partition);
+        }
+        return errorCode.value;
+    }
+
+    private static int appExistsOnPartitionWithRoot(final String packageName, String partition) {
+        final ErrorCode errorCode = new ErrorCode(ERROR_NOT_EXISTING);
+        Command command = new Command(0, new String[] { "busybox ls /" + partition + "/app | grep " + packageName }) {
+
+            @Override
+            public void output(int id, String line) {
+                if (id == 0 && line != null && line.length() > 0) {
+                    Log.d(TAG, line);
+                    if (line.contains(packageName)) {
+                        errorCode.value = ERROR_NONE;
                     }
-                    else if (r.contains("fail")) {
-                        errorCode = ERROR_BUSYBOX;
+                    else if (line.contains("fail")) {
+                        errorCode.value = ERROR_BUSYBOX;
                     }
                 }
-            } catch (IOException e) {
-                errorCode = ERROR_BUSYBOX;
-                e.printStackTrace();
-            } catch (RootToolsException e) {
-                errorCode = ERROR_BUSYBOX;
-                e.printStackTrace();
-            } catch (TimeoutException e) {
-                errorCode = ERROR_BUSYBOX;
-                e.printStackTrace();
             }
+        };
+        try {
+            Shell rootShell = RootTools.getShell(true);
+            rootShell.add(command).waitForFinish();
+            rootShell.close();
         }
-        return errorCode;
+        catch (IOException e) {
+            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            errorCode.value = ERROR_BUSYBOX;
+        } catch (InterruptedException e) {
+            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            errorCode.value = ERROR_BUSYBOX;
+        }
+
+        return errorCode.value;
     }
 
     /**
@@ -107,7 +128,7 @@ public class AppMover {
      * @return the error code or ERROR_NONE if OK
      */
     public static int appFitsOnPartition(String packageName, String partition) {
-        int errorCode = ERROR_INSUFFICIENT_SPACE;
+        final ErrorCode errorCode = new ErrorCode(ERROR_INSUFFICIENT_SPACE);
         long freeDiskSpace = RootTools.getSpace("/" + partition);
         long apkSpace = 0;
 
@@ -127,9 +148,9 @@ public class AppMover {
         Log.d(TAG, "Required disk space for APK: " + apkSpace);
 
         if ((apkSpace > 0) && (freeDiskSpace > apkSpace)) {
-            errorCode = ERROR_NONE;
+            errorCode.value = ERROR_NONE;
         }
-        return errorCode;
+        return errorCode.value;
     }
 
     /**
@@ -154,21 +175,21 @@ public class AppMover {
     }
 
     public static int moveAppEx(String packageName, String sourcePartition, String targetPartition, int flags) {
-        int errorCode = ERROR_NONE;
+        final ErrorCode errorCode = new ErrorCode(ERROR_NONE);
         boolean needRemountSystem = (sourcePartition.equals(PARTITION_SYSTEM) || targetPartition.equals(PARTITION_SYSTEM));
         if (needRemountSystem) {
             if (!RootTools.remount("/system", "RW")) {
-                errorCode = ERROR_REMOUNT_SYSTEM;
+                errorCode.value = ERROR_REMOUNT_SYSTEM;
             }
         }
 
-        if (errorCode == ERROR_NONE) {
+        if (errorCode.value == ERROR_NONE) {
             // install or remove system app
             String shellCmd = "busybox mv /" + sourcePartition + "/app/" + packageName + "*.apk /" + targetPartition + "/app/";
             boolean forceMove = true;
             if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
-                errorCode = appExistsOnPartition(packageName, sourcePartition);
-                if (errorCode == AppMover.ERROR_NONE) {
+                errorCode.value = appExistsOnPartition(packageName, sourcePartition);
+                if (errorCode.value == AppMover.ERROR_NONE) {
                     // App is already existing in target partition, so just remove it from source partition
                     shellCmd = "busybox rm /" + sourcePartition + "/app/" + packageName + "*.apk";
                     forceMove = false;
@@ -180,22 +201,28 @@ public class AppMover {
             }
             Log.d(TAG, shellCmd);
 
-            if (errorCode == ERROR_NONE) {
+            if (errorCode.value == ERROR_NONE) {
                 // move APK to system partition or vice versa
-                try {
-                    List<String> result = RootTools.sendShell(shellCmd, -1);
-                    for (String r : result) {
-                        Log.d(TAG, "Result " + r);
+                Command command = new Command(1, new String[] { shellCmd }) {
+
+                    @Override
+                    public void output(int id, String line) {
+                        if (id == 1 && line != null && line.length() > 0) {
+                            Log.d(TAG, line);
+                        }
                     }
-                } catch (IOException e) {
-                    errorCode = ERROR_BUSYBOX;
-                    e.printStackTrace();
-                } catch (RootToolsException e) {
-                    errorCode = ERROR_BUSYBOX;
-                    e.printStackTrace();
-                } catch (TimeoutException e) {
-                    errorCode = ERROR_BUSYBOX;
-                    e.printStackTrace();
+                };
+                try {
+                    Shell rootShell = RootTools.getShell(true);
+                    rootShell.add(command).waitForFinish();
+                    rootShell.close();
+                }
+                catch (IOException e) {
+                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                    errorCode.value = ERROR_BUSYBOX;
+                } catch (InterruptedException e) {
+                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                    errorCode.value = ERROR_BUSYBOX;
                 }
 
                 if (needRemountSystem) {
@@ -204,6 +231,6 @@ public class AppMover {
                 }
             }
         }
-        return errorCode;
+        return errorCode.value;
     }
 }
