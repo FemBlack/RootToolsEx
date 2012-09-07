@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.text.AndroidCharacter;
+import android.util.Log;
 import com.stericson.RootTools.Command;
 import com.stericson.RootTools.RootTools;
 import com.stericson.RootTools.Shell;
@@ -41,6 +42,10 @@ public class ErrorReport {
     public static final int ERROR_MISSING_EMAILADDRESS  = 3;
     public static final int ERROR_INVALID_CONTEXT       = 4;
     public static final int ERROR_WRITE_SYSTEM_INFO     = 5;
+    public static final int ERROR_APPEND_LOGFILE        = 6;
+    public static final int ERROR_LOGTOOL_FAILED        = 7;
+
+    private final static String TAG = "ErrorReport";
 
     private final Context context;
     private final String chooserTitle;
@@ -76,7 +81,7 @@ public class ErrorReport {
         if (result == ERROR_NONE) {
             result = createReport();
         }
-        if (result == ERROR_NONE) {
+        if (result == ERROR_NONE || result == ERROR_LOGTOOL_FAILED) {
             sendIntent();
         }
         return result;
@@ -315,11 +320,16 @@ public class ErrorReport {
             logLines.add("");
         }
 
+        return addLogLines(outputFile, false, logLines);
+    }
+
+    private int addLogLines(String outputFile, boolean append, List<String> logLines) {
+        int result = ERROR_NONE;
         if (logLines.size() > 0) {
             // write into output file
             FileOutputStream f = null;
             try {
-                f = new FileOutputStream(new File(outputFile));
+                f = new FileOutputStream(new File(outputFile), append);
                 for(String line : logLines) {
                     f.write((line + "\n").getBytes());
                 }
@@ -332,8 +342,11 @@ public class ErrorReport {
             }
             finally {
                 try {
-                    f.flush();
-                    f.close();
+                    if (f != null) {
+                        f.flush();
+                        f.close();
+                    }
+
                 } catch (IOException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
                     result = ERROR_WRITE_SYSTEM_INFO;
@@ -346,11 +359,15 @@ public class ErrorReport {
 
     private int runLogTool(String outputFile, boolean append) {
         int result = ERROR_NONE;
-        Command command = new Command(0,
-                new String[] { logTool + " " + logParams + (append ? " >> " : " > ") + outputFile }) {
+        final List<String> logLines = new ArrayList<String>();
+
+        Command command = new Command(0, logTool + " " + logParams + (append ? " >> " : " > ") + outputFile ) {
 
             @Override
             public void output(int id, String line) {
+                if (line != null) {
+                    logLines.add(line);
+                }
             }
         };
         try {
@@ -360,12 +377,15 @@ public class ErrorReport {
         }
         catch (IOException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            result = ERROR_WHILE_CREATE;
+            logLines.add(e.getMessage());
+            result = ERROR_LOGTOOL_FAILED;
         } catch (InterruptedException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            result = ERROR_WHILE_CREATE;
+            logLines.add(e.getMessage());
+            result = ERROR_LOGTOOL_FAILED;
         }
-        return result;
+
+        return addLogLines(outputFile, true, logLines);
     }
 
     private int verify() {
