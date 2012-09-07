@@ -89,7 +89,7 @@ public class AppMover {
 
     private static int appExistsOnPartitionWithRoot(final String packageName, String partition) {
         final ErrorCode errorCode = new ErrorCode(ERROR_NOT_EXISTING);
-        Command command = new Command(0, new String[] { "busybox ls /" + partition + "/app | grep " + packageName }) {
+        Command command = new Command(0, "busybox ls /" + partition + "/app | grep " + packageName) {
 
             @Override
             public void output(int id, String line) {
@@ -186,24 +186,18 @@ public class AppMover {
         if (errorCode.value == ERROR_NONE) {
             // install or remove system app
             String shellCmd = "busybox mv /" + sourcePartition + "/app/" + packageName + "*.apk /" + targetPartition + "/app/";
-            boolean forceMove = true;
             if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
                 errorCode.value = appExistsOnPartition(packageName, sourcePartition);
                 if (errorCode.value == AppMover.ERROR_NONE) {
                     // App is already existing in target partition, so just remove it from source partition
                     shellCmd = "busybox rm /" + sourcePartition + "/app/" + packageName + "*.apk";
-                    forceMove = false;
                 }
-            }
-            if (forceMove) {
-                // App is only existing in system directory, so move it back to data directory
-                shellCmd = "busybox mv /" + sourcePartition + "/app/" + packageName + "*.apk /" + targetPartition + "/app/";
             }
             Log.d(TAG, shellCmd);
 
             if (errorCode.value == ERROR_NONE) {
                 // move APK to system partition or vice versa
-                Command command = new Command(1, new String[] { shellCmd }) {
+                Command command = new Command(1, shellCmd) {
 
                     @Override
                     public void output(int id, String line) {
