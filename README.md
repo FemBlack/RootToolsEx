@@ -22,7 +22,7 @@ The `ErrorReport` class creates an error report that can be forwarded to the dev
 
         ErrorReport report = new ErrorReport.Builder(context)
                 .setChooserTitle(context.getString(R.string.senderrorreport))
-                .setEmailAddress("by-email-address-for-error-reports@gmail.com")
+                .setEmailAddress("my-email-address-for-error-reports@gmail.com")
                 .setEmailSubject("App Quarantine error report")
                 .setEmailText("Hi ramdroid, here's my error report!")
                 .includeRunningProcesses()
@@ -31,4 +31,21 @@ The `ErrorReport` class creates an error report that can be forwarded to the dev
 
 Important: The `WRITE_EXTERNAL_STORAGE` permission is needed!
 
+#2 AppMover
+===========
 
+The `AppMover` class allows to move apps from data to system partition and vice versa. It also includes few utility functions, for instance you should check if there's enough space on system partition before trying to move over something. The interface is dead simple:
+
+        int errorCode = AppMover.appFitsOnPartition("com.example.myapp", AppMover.PARTITION_SYSTEM);
+        if (errorCode == AppMover.ERROR_INSUFFICIENT_SPACE) {
+        
+                // Insufficient space, drop an error message...
+        }
+        else if (errorCode != AppMover.ERROR_NONE) {
+        
+                // Some issues with root access or missing busybox...
+        }
+        else {
+                // Disk space OK, now do some action
+                AppMover.installSystemApp("com.example.myapp");
+        }
