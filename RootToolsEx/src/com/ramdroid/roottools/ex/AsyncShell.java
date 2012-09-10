@@ -14,18 +14,15 @@ import java.util.List;
  *
  * Calls to the shell don't block, so you can call it from the main thread.
  */
-public class ShellExecution {
+public class AsyncShell {
 
     private boolean useRoot;
     private int commandId;
     private String[] command;
     ResultListener listener;
 
-    public void ShellExecution(boolean useRoot) {
+    public void send(boolean useRoot, final int commandId, String... command) {
         this.useRoot = useRoot;
-    }
-
-    public void send(final int commandId, String... command) {
         this.commandId = commandId;
         this.command = command;
         new Worker().execute();
@@ -39,11 +36,16 @@ public class ShellExecution {
         this.listener = listener;
     }
 
-    private class Worker extends AsyncTask<Void, Void, Integer> {
-
+    public static class Exec {
         private List<String> output = new ArrayList<String>();
+        private Shell rootShell;
+        private boolean useRoot;
 
-        protected Integer doInBackground(Void... params) {
+        public Exec(boolean useRoot) {
+            this.useRoot = useRoot;
+        }
+
+        public int run(final int commandId, String... command) {
             int exitCode = -1;
             Command cmd = new Command(0, command) {
 
@@ -56,9 +58,8 @@ public class ShellExecution {
             };
 
             try {
-                Shell rootShell = RootTools.getShell(useRoot);
+                rootShell = RootTools.getShell(useRoot);
                 exitCode = rootShell.add(cmd).exitCode();
-                rootShell.close();
             }
             catch (IOException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
@@ -68,13 +69,33 @@ public class ShellExecution {
             return exitCode;
         }
 
+        public void destroy() {
+            try {
+                rootShell.close();
+            } catch (IOException e) {
+                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            }
+        }
+    }
+
+    private class Worker extends AsyncTask<Boolean, Void, Integer> {
+
+        private Exec exec;
+
+        protected Integer doInBackground(Boolean... params) {
+            exec = new Exec(useRoot);
+            int exitCode = exec.run(commandId, command);
+            exec.destroy();
+            return exitCode;
+        }
+
         protected void onPreExecute() {
 
         }
 
         protected void onPostExecute(Integer exitCode) {
             if (listener != null) {
-                listener.onFinished(exitCode, output);
+                listener.onFinished(exitCode, exec.output);
             }
         }
     }
