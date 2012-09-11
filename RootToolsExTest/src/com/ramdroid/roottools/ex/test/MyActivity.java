@@ -23,7 +23,7 @@ public class MyActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
-        ShellService.create(this, new AsyncShell.ResultListener() {
+        ShellService.create(this, true, new AsyncShell.ResultListener() {
             @Override
             public void onFinished(int exitCode, final List<String> output) {
                 handler.post(new Runnable() {

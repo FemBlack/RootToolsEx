@@ -16,18 +16,32 @@ import java.util.List;
  */
 public class ShellService extends Service {
 
-    public static final String ACTION_SEND_SHELL_CMD = "com.ramdroid.roottools.ex.SEND_SHELL_CMD";
+    private static final String ACTION_SEND_SHELL_CMD = "com.ramdroid.roottools.ex.SEND_SHELL_CMD";
 
-    public static final String REQUEST_RECEIVER_EXTRA = "ShellServiceRequestReceiverExtra";
-    public static final int RESULT_ID_QUOTE = 42;
+    private static final String REQUEST_RECEIVER_EXTRA = "ShellServiceRequestReceiverExtra";
+    private static final int RESULT_ID_QUOTE = 42;
 
     private CommandReceiver receiver;
     private AsyncShell.Exec shellExec;
     private int commandId;
     private ResultReceiver resultReceiver;
 
-    public static void create(Context context, final AsyncShell.ResultListener listener) {
+    /**
+     * Starts the {@link ShellService} and prepares the result listener.
+     *
+     * Results from commands that are send to the service later are returned to the caller
+     * in the {@link AsyncShell.ResultListener}.
+     *
+     * Please note that the result is coming from a different thread. So you have to make
+     * sure that result is send back to the UI thread, for instance by using a {@link android.os.Handler}.
+     *
+     * @param context Context of the caller.
+     * @param useRoot True if you need a root shell.
+     * @param listener Returns the command result.
+     */
+    public static void create(Context context, boolean useRoot, final AsyncShell.ResultListener listener) {
         Intent i = new Intent(context, ShellService.class);
+        i.putExtra("useRoot", useRoot);
         i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
             @Override
             protected void onReceiveResult(int resultCode, Bundle resultData) {
@@ -41,10 +55,21 @@ public class ShellService extends Service {
         context.startService(i);
     }
 
+    /**
+     * Stops all action in the {@link ShellService} and terminates the service.
+     *
+     * @param context Context of the caller.
+     */
     public static void destroy(Context context) {
         context.stopService(new Intent(context, ShellService.class));
     }
 
+    /**
+     * Sends a command to the {@link ShellService}.
+     *
+     * @param context Context of the caller.
+     * @param cmd the command to execute in the shell.
+     */
     public static void send(Context context, String cmd) {
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
         i.putExtra("cmd", cmd);
@@ -82,7 +107,7 @@ public class ShellService extends Service {
         shellExec.destroy();
     }
 
-    class CommandReceiver extends BroadcastReceiver {
+    private class CommandReceiver extends BroadcastReceiver {
 
         @Override
         public void onReceive(Context context, Intent intent) {
