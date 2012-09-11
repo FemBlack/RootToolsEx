@@ -3,7 +3,7 @@
           package="com.ramdroid.roottools.ex"
           android:versionCode="1"
           android:versionName="1.0">
-    <application android:label="RootToolsEx" >
+    <application android:label="RootToolsEx">
 
     </application>
 </manifest>

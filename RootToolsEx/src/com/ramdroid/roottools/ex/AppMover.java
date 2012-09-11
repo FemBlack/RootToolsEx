@@ -13,19 +13,19 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Moves an app from one partition to another.
- *
+ * <p/>
  * You could use the following high level functions:
- *
+ * <p/>
  * 1. Install as system app / Update system app
- *
- *    AppMover.installSystemApp("com.example.myapp");
- *
+ * <p/>
+ * AppMover.installSystemApp("com.example.myapp");
+ * <p/>
  * 2. Remove a system app (move back to DATA, if APK on DATA was not updated)
- *
- *    AppMover.removeSystemApp("com.example.myapp");
- *
+ * <p/>
+ * AppMover.removeSystemApp("com.example.myapp");
+ * <p/>
  * If you need a different behaviour you can use the moveAppEx function.
- *
+ * <p/>
  * Note:
  * Before moving apps you should call appFitsOnPartition(...) to make sure the
  * APK fits on the target partition.
@@ -34,36 +34,37 @@ public class AppMover {
 
     private static final String TAG = "AppMover";
 
-    public static final String PARTITION_DATA           = "data";
-    public static final String PARTITION_SYSTEM         = "system";
+    public static final String PARTITION_DATA = "data";
+    public static final String PARTITION_SYSTEM = "system";
 
-    public static final int FLAG_OVERWRITE              = 1;
+    public static final int FLAG_OVERWRITE = 1;
 
-    public static final int ERROR_NONE                  = 0;
-    public static final int ERROR_BUSYBOX               = 1;
-    public static final int ERROR_NOT_EXISTING          = 2;
-    public static final int ERROR_INSUFFICIENT_SPACE    = 3;
-    public static final int ERROR_REMOUNT_SYSTEM        = 4;
+    public static final int ERROR_NONE = 0;
+    public static final int ERROR_BUSYBOX = 1;
+    public static final int ERROR_NOT_EXISTING = 2;
+    public static final int ERROR_INSUFFICIENT_SPACE = 3;
+    public static final int ERROR_REMOUNT_SYSTEM = 4;
 
     private static class ErrorCode {
 
         ErrorCode(int value) {
             this.value = value;
         }
+
         int value;
     }
 
     /**
      * Check if an app is installed on a particular partition or not.
-     *
+     * <p/>
      * When searching for an APK on the SYSTEM partition then root access is not required and we can just use
      * Java functions to parse the files.
-     *
+     * <p/>
      * When searching for an APK on the DATA partition then we have no read access and need to launch a busybox
      * command instead.
      *
      * @param packageName Package name of the App e.g. com.example.myapp
-     * @param partition PARTITION_DATA or PARTITION_SYSTEM
+     * @param partition   PARTITION_DATA or PARTITION_SYSTEM
      * @return the error code or ERROR_NONE if OK
      */
     public static int appExistsOnPartition(String packageName, String partition) {
@@ -80,8 +81,7 @@ public class AppMover {
                     }
                 }
             }
-        }
-        else {
+        } else {
             errorCode.value = appExistsOnPartitionWithRoot(packageName, partition);
         }
         return errorCode.value;
@@ -97,8 +97,7 @@ public class AppMover {
                     Log.d(TAG, line);
                     if (line.contains(packageName)) {
                         errorCode.value = ERROR_NONE;
-                    }
-                    else if (line.contains("fail")) {
+                    } else if (line.contains("fail")) {
                         errorCode.value = ERROR_BUSYBOX;
                     }
                 }
@@ -108,8 +107,7 @@ public class AppMover {
             Shell rootShell = RootTools.getShell(true);
             rootShell.add(command).waitForFinish();
             rootShell.close();
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
             errorCode.value = ERROR_BUSYBOX;
         } catch (InterruptedException e) {
@@ -124,7 +122,7 @@ public class AppMover {
      * Checks if the APK fits on the specified partition.
      *
      * @param packageName Package name of the App e.g. com.example.myapp
-     * @param partition PARTITION_DATA or PARTITION_SYSTEM
+     * @param partition   PARTITION_DATA or PARTITION_SYSTEM
      * @return the error code or ERROR_NONE if OK
      */
     public static int appFitsOnPartition(String packageName, String partition) {
@@ -210,8 +208,7 @@ public class AppMover {
                     Shell rootShell = RootTools.getShell(true);
                     rootShell.add(command).waitForFinish();
                     rootShell.close();
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
                     errorCode.value = ERROR_BUSYBOX;
                 } catch (InterruptedException e) {

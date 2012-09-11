@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Wrapper around the new shell interface from RootTools.
- *
+ * <p/>
  * Calls to the shell don't block, so you can call it from the main thread.
  */
 public class AsyncShell {
@@ -37,7 +37,8 @@ public class AsyncShell {
     }
 
     public static class Exec {
-        private List<String> output = new ArrayList<String>();
+        public ArrayList<String> output;
+
         private Shell rootShell;
         private boolean useRoot;
 
@@ -47,7 +48,8 @@ public class AsyncShell {
 
         public int run(final int commandId, String... command) {
             int exitCode = -1;
-            Command cmd = new Command(0, command) {
+            output = new ArrayList<String>();
+            Command cmd = new Command(commandId, command) {
 
                 @Override
                 public void output(int id, String line) {
@@ -60,8 +62,7 @@ public class AsyncShell {
             try {
                 rootShell = RootTools.getShell(useRoot);
                 exitCode = rootShell.add(cmd).exitCode();
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
             } catch (InterruptedException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
@@ -71,7 +72,9 @@ public class AsyncShell {
 
         public void destroy() {
             try {
-                rootShell.close();
+                if (rootShell != null) {
+                    rootShell.close();
+                }
             } catch (IOException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
             }
