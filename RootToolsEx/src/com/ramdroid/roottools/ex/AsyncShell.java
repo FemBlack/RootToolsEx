@@ -8,32 +8,32 @@ import com.stericson.RootTools.Shell;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Wrapper around the new shell interface from RootTools.
- * <p/>
+ *
  * Calls to the shell don't block, so you can call it from the main thread.
  */
 public class AsyncShell {
 
-    private boolean useRoot;
-    private int commandId;
-    private String[] command;
-    ResultListener listener;
+    private ResultListener listener;
 
-    public void send(boolean useRoot, final int commandId, String... command) {
-        this.useRoot = useRoot;
-        this.commandId = commandId;
-        this.command = command;
-        new Worker().execute();
+    private static int commandId = 0;
+
+    public void send(boolean useRoot, String[] command, ResultListener listener) {
+        this.listener = listener;
+        commandId += 1;
+
+        Worker w = new Worker();
+        w.useRoot = useRoot;
+        w.commandId = commandId;
+        w.command = command;
+        w.execute();
     }
 
     public interface ResultListener {
         void onFinished(int exitCode, List<String> output);
-    }
-
-    public void setResultListener(ResultListener listener) {
-        this.listener = listener;
     }
 
     public static class Exec {
@@ -66,6 +66,8 @@ public class AsyncShell {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
             } catch (InterruptedException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            } catch (TimeoutException e) {
+                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
             }
             return exitCode;
         }
@@ -84,6 +86,9 @@ public class AsyncShell {
     private class Worker extends AsyncTask<Boolean, Void, Integer> {
 
         private Exec exec;
+        private boolean useRoot;
+        private int commandId;
+        private String[] command;
 
         protected Integer doInBackground(Boolean... params) {
             exec = new Exec(useRoot);

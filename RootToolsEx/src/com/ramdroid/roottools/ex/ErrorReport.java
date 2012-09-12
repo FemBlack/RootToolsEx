@@ -8,7 +8,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
-import android.text.AndroidCharacter;
+
 import com.stericson.RootTools.Command;
 import com.stericson.RootTools.RootTools;
 import com.stericson.RootTools.Shell;
@@ -19,28 +19,33 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Generates an error report and sends an intent to send it by email or another service of choice.
- * <p/>
+ *
  * In the most simple solution you just have to add a valid email address:
- * <p/>
+ *
  * ErrorReport report = new ErrorReport.Builder(context)
- * .setEmailAddress("your.email@gmail.com")
- * .build();
+ *          .setEmailAddress("your.email@gmail.com")
+ *          .build();
  * report.send();
- * <p/>
+ *
  * There are more options like changing email subject/text, title of the chooser dialog.
  * You can even choose a different log option. By default logcat is being used.
- */
+ * */
 public class ErrorReport {
 
-    public static final int ERROR_NONE = 0;
-    public static final int ERROR_WHILE_CREATE = 1;
-    public static final int ERROR_ACCESS_OUTPUTFILE = 2;
-    public static final int ERROR_MISSING_EMAILADDRESS = 3;
-    public static final int ERROR_INVALID_CONTEXT = 4;
-    public static final int ERROR_WRITE_SYSTEM_INFO = 5;
+    public static final int ERROR_NONE                  = 0;
+    public static final int ERROR_WHILE_CREATE          = 1;
+    public static final int ERROR_ACCESS_OUTPUTFILE     = 2;
+    public static final int ERROR_MISSING_EMAILADDRESS  = 3;
+    public static final int ERROR_INVALID_CONTEXT       = 4;
+    public static final int ERROR_WRITE_SYSTEM_INFO     = 5;
+    public static final int ERROR_APPEND_LOGFILE        = 6;
+    public static final int ERROR_LOGTOOL_FAILED        = 7;
+
+    private final static String TAG = "ErrorReport";
 
     private final Context context;
     private final String chooserTitle;
@@ -76,7 +81,7 @@ public class ErrorReport {
         if (result == ERROR_NONE) {
             result = createReport();
         }
-        if (result == ERROR_NONE) {
+        if (result == ERROR_NONE || result == ERROR_LOGTOOL_FAILED) {
             sendIntent();
         }
         return result;
@@ -168,7 +173,6 @@ public class ErrorReport {
          * By default logcat is called with -d -v time
          * -d means that logcat immediately returns when the log has been parsed.
          * -v time means that the current time is added to each line.
-         *
          * @param logParams The new parameters for the log tool.
          * @return Returns the {@link Builder}.
          */
@@ -180,7 +184,6 @@ public class ErrorReport {
         /**
          * Change the name of the log file that is send to the receiver.
          * If not set then the default name will be used.
-         *
          * @param logFile The new log file name.
          * @return Returns the {@link Builder}.
          */
@@ -191,7 +194,6 @@ public class ErrorReport {
 
         /**
          * Don't include the header with system information.
-         *
          * @return Returns the {@link Builder}.
          */
         public Builder hideSystemInfo() {
@@ -201,7 +203,6 @@ public class ErrorReport {
 
         /**
          * Include a list of running processes in the header.
-         *
          * @return Returns the {@link Builder}.
          */
         public Builder includeRunningProcesses() {
@@ -237,7 +238,8 @@ public class ErrorReport {
                 File f = new File(ext, logFile);
                 outputFile = f.getPath();
             }
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             e.printStackTrace();
         }
         return outputFile;
@@ -246,7 +248,7 @@ public class ErrorReport {
     private void sendIntent() {
         Intent emailIntent = new Intent(android.content.Intent.ACTION_SEND);
         emailIntent.setType("text/plain");
-        emailIntent.putExtra(android.content.Intent.EXTRA_EMAIL, new String[]{emailAddress});
+        emailIntent.putExtra(android.content.Intent.EXTRA_EMAIL, new String[] {emailAddress});
         emailIntent.putExtra(android.content.Intent.EXTRA_SUBJECT, emailSubject);
         emailIntent.putExtra(android.content.Intent.EXTRA_TEXT, emailText);
         emailIntent.putExtra(Intent.EXTRA_STREAM, Uri.parse("file://" + getOutputFile()));
@@ -318,12 +320,17 @@ public class ErrorReport {
             logLines.add("");
         }
 
+        return addLogLines(outputFile, false, logLines);
+    }
+
+    private int addLogLines(String outputFile, boolean append, List<String> logLines) {
+        int result = ERROR_NONE;
         if (logLines.size() > 0) {
             // write into output file
             FileOutputStream f = null;
             try {
-                f = new FileOutputStream(new File(outputFile));
-                for (String line : logLines) {
+                f = new FileOutputStream(new File(outputFile), append);
+                for(String line : logLines) {
                     f.write((line + "\n").getBytes());
                 }
             } catch (FileNotFoundException e) {
@@ -332,10 +339,14 @@ public class ErrorReport {
             } catch (IOException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
                 result = ERROR_WRITE_SYSTEM_INFO;
-            } finally {
+            }
+            finally {
                 try {
-                    f.flush();
-                    f.close();
+                    if (f != null) {
+                        f.flush();
+                        f.close();
+                    }
+
                 } catch (IOException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
                     result = ERROR_WRITE_SYSTEM_INFO;
@@ -348,25 +359,37 @@ public class ErrorReport {
 
     private int runLogTool(String outputFile, boolean append) {
         int result = ERROR_NONE;
-        Command command = new Command(0,
-                new String[]{logTool + " " + logParams + (append ? " >> " : " > ") + outputFile}) {
+        final List<String> logLines = new ArrayList<String>();
+
+        Command command = new Command(0, logTool + " " + logParams + (append ? " >> " : " > ") + outputFile ) {
 
             @Override
             public void output(int id, String line) {
+                if (line != null) {
+                    logLines.add(line);
+                }
             }
         };
         try {
             Shell rootShell = RootTools.getShell(true);
             rootShell.add(command).waitForFinish();
             rootShell.close();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            result = ERROR_WHILE_CREATE;
+            logLines.add(e.getMessage());
+            result = ERROR_LOGTOOL_FAILED;
         } catch (InterruptedException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            result = ERROR_WHILE_CREATE;
+            logLines.add(e.getMessage());
+            result = ERROR_LOGTOOL_FAILED;
+        } catch (TimeoutException e) {
+            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            logLines.add(e.getMessage());
+            result = ERROR_LOGTOOL_FAILED;
         }
-        return result;
+
+        return addLogLines(outputFile, true, logLines);
     }
 
     private int verify() {
