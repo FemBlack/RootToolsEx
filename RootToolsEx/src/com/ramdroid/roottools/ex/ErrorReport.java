@@ -9,17 +9,12 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 
-import com.stericson.RootTools.Command;
-import com.stericson.RootTools.RootTools;
-import com.stericson.RootTools.Shell;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Generates an error report and sends an intent to send it by email or another service of choice.
@@ -35,15 +30,6 @@ import java.util.concurrent.TimeoutException;
  * You can even choose a different log option. By default logcat is being used.
  * */
 public class ErrorReport {
-
-    public static final int ERROR_NONE                  = 0;
-    public static final int ERROR_WHILE_CREATE          = 1;
-    public static final int ERROR_ACCESS_OUTPUTFILE     = 2;
-    public static final int ERROR_MISSING_EMAILADDRESS  = 3;
-    public static final int ERROR_INVALID_CONTEXT       = 4;
-    public static final int ERROR_WRITE_SYSTEM_INFO     = 5;
-    public static final int ERROR_APPEND_LOGFILE        = 6;
-    public static final int ERROR_LOGTOOL_FAILED        = 7;
 
     private final static String TAG = "ErrorReport";
 
@@ -78,11 +64,15 @@ public class ErrorReport {
      */
     public int send() {
         int result = verify();
-        if (result == ERROR_NONE) {
-            result = createReport();
-        }
-        if (result == ERROR_NONE || result == ERROR_LOGTOOL_FAILED) {
-            sendIntent();
+        if (result == ErrorCode.NONE) {
+            createReport(new ErrorCodeListener() {
+                @Override
+                public void onResult(int errorCode) {
+                    if (errorCode == ErrorCode.NONE || errorCode == ErrorCode.LOGTOOL_FAILED) {
+                        sendIntent();
+                    }
+                }
+            });
         }
         return result;
     }
@@ -258,29 +248,34 @@ public class ErrorReport {
         context.startActivity(launchIntent);
     }
 
-    private int createReport() {
+    private void createReport(final ErrorCodeListener listener) {
         // initialize output file
-        int result = ERROR_NONE;
+        int result = ErrorCode.NONE;
         String outputFile = getOutputFile();
         if (outputFile == null) {
-            result = ERROR_ACCESS_OUTPUTFILE;
+            result = ErrorCode.ACCESS_OUTPUTFILE;
         }
 
         // include header with system info, running tasks, etc.
-        if (result == ERROR_NONE) {
+        if (result == ErrorCode.NONE) {
             result = createSystemInfo(outputFile);
         }
 
         // attach log report
-        if (result == ERROR_NONE) {
+        if (result == ErrorCode.NONE) {
             boolean append = includeSystemInfo || includeRunningProcesses;
-            result = runLogTool(outputFile, append);
+            runLogTool(outputFile, append, new ErrorCodeListener() {
+                @Override
+                public void onResult(int errorCode) {
+                    listener.onResult(errorCode);
+                }
+            });
         }
-        return result;
+        else listener.onResult(result);
     }
 
     private int createSystemInfo(String outputFile) {
-        int result = ERROR_NONE;
+        int result = ErrorCode.NONE;
         List<String> logLines = new ArrayList<String>();
 
         if (includeSystemInfo) {
@@ -291,9 +286,9 @@ public class ErrorReport {
                 appInfo = pm.getApplicationInfo(context.getPackageName(), 0);
                 pInfo = pm.getPackageInfo(context.getPackageName(), 0);
             } catch (PackageManager.NameNotFoundException e) {
-                result = ERROR_INVALID_CONTEXT;
+                result = ErrorCode.INVALID_CONTEXT;
             }
-            if (result == ERROR_NONE) {
+            if (result == ErrorCode.NONE) {
                 CharSequence appLabel = context.getPackageManager().getApplicationLabel(appInfo);
                 logLines.add("App version:      " + appLabel + " " + pInfo.versionName + " (" + pInfo.versionCode + ")");
                 logLines.add("Android:          " + Build.VERSION.RELEASE + " (" + Build.VERSION.CODENAME + ")");
@@ -324,7 +319,7 @@ public class ErrorReport {
     }
 
     private int addLogLines(String outputFile, boolean append, List<String> logLines) {
-        int result = ERROR_NONE;
+        int result = ErrorCode.NONE;
         if (logLines.size() > 0) {
             // write into output file
             FileOutputStream f = null;
@@ -335,10 +330,10 @@ public class ErrorReport {
                 }
             } catch (FileNotFoundException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                result = ERROR_WRITE_SYSTEM_INFO;
+                result = ErrorCode.WRITE_SYSTEM_INFO;
             } catch (IOException e) {
                 e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                result = ERROR_WRITE_SYSTEM_INFO;
+                result = ErrorCode.WRITE_SYSTEM_INFO;
             }
             finally {
                 try {
@@ -349,7 +344,7 @@ public class ErrorReport {
 
                 } catch (IOException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                    result = ERROR_WRITE_SYSTEM_INFO;
+                    result = ErrorCode.WRITE_SYSTEM_INFO;
                 }
 
             }
@@ -357,45 +352,26 @@ public class ErrorReport {
         return result;
     }
 
-    private int runLogTool(String outputFile, boolean append) {
-        int result = ERROR_NONE;
-        final List<String> logLines = new ArrayList<String>();
-
-        Command command = new Command(0, logTool + " " + logParams + (append ? " >> " : " > ") + outputFile ) {
-
-            @Override
-            public void output(int id, String line) {
-                if (line != null) {
-                    logLines.add(line);
-                }
-            }
-        };
-        try {
-            Shell rootShell = RootTools.getShell(true);
-            rootShell.add(command).waitForFinish();
-            rootShell.close();
-        }
-        catch (IOException e) {
-            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            logLines.add(e.getMessage());
-            result = ERROR_LOGTOOL_FAILED;
-        } catch (InterruptedException e) {
-            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            logLines.add(e.getMessage());
-            result = ERROR_LOGTOOL_FAILED;
-        } catch (TimeoutException e) {
-            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            logLines.add(e.getMessage());
-            result = ERROR_LOGTOOL_FAILED;
-        }
-
-        return addLogLines(outputFile, true, logLines);
+    private void runLogTool(final String outputFile, final boolean append, final ErrorCodeListener listener) {
+        final String logCommand = logTool + " " + logParams + (append ? " >> " : " > ") + outputFile;
+        new AsyncShell().send(true,
+                new String[] { logCommand },
+                new AsyncShell.ResultListener() {
+                    @Override
+                    public void onFinished(int exitCode, List<String> output) {
+                        addLogLines(outputFile, true, output);
+                        if (exitCode != 0) {
+                            listener.onResult(ErrorCode.LOGTOOL_FAILED);
+                        }
+                        else listener.onResult(ErrorCode.NONE);
+                    }
+                });
     }
 
     private int verify() {
         if (emailAddress.length() < 1) {
-            return ERROR_MISSING_EMAILADDRESS;
+            return ErrorCode.MISSING_EMAILADDRESS;
         }
-        return ERROR_NONE;
+        return ErrorCode.NONE;
     }
 }

@@ -63,11 +63,11 @@ public class AsyncShell {
                 rootShell = RootTools.getShell(useRoot);
                 exitCode = rootShell.add(cmd).exitCode();
             } catch (IOException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                output.add(e.toString());
             } catch (InterruptedException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                output.add(e.toString());
             } catch (TimeoutException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                output.add(e.toString());
             }
             return exitCode;
         }

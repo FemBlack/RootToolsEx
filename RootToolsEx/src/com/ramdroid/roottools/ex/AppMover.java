@@ -37,15 +37,12 @@ public class AppMover {
 
     public static final int FLAG_OVERWRITE              = 1;
 
-    public static final int ERROR_NONE                  = 0;
-    public static final int ERROR_BUSYBOX               = 1;
-    public static final int ERROR_NOT_EXISTING          = 2;
-    public static final int ERROR_INSUFFICIENT_SPACE    = 3;
-    public static final int ERROR_REMOUNT_SYSTEM        = 4;
+    // TODO: move below functions into a private sub class
+    // TODO: public wrapper functions that execute the private functions in a separate thread
 
-    private static class ErrorCode {
+    private static class ErrorWrapper {
 
-        ErrorCode(int value) {
+        ErrorWrapper(int value) {
             this.value = value;
         }
         int value;
@@ -65,7 +62,7 @@ public class AppMover {
      * @return the error code or ERROR_NONE if OK
      */
     public static int appExistsOnPartition(String packageName, String partition) {
-        final ErrorCode errorCode = new ErrorCode(ERROR_NOT_EXISTING);
+        final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NOT_EXISTING);
         if (partition.equals(PARTITION_SYSTEM)) {
             File root = new File("/" + partition + "/app/");
             File[] files = root.listFiles();
@@ -73,7 +70,7 @@ public class AppMover {
                 for (File f : files) {
                     if (f.getName().contains(packageName)) {
                         Log.d(TAG, "Found " + f.getPath());
-                        errorCode.value = ERROR_NONE;
+                        errorCode.value = ErrorCode.NONE;
                         break;
                     }
                 }
@@ -86,7 +83,7 @@ public class AppMover {
     }
 
     private static int appExistsOnPartitionWithRoot(final String packageName, String partition) {
-        final ErrorCode errorCode = new ErrorCode(ERROR_NOT_EXISTING);
+        final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NOT_EXISTING);
         Command command = new Command(0, "busybox ls /" + partition + "/app | grep " + packageName) {
 
             @Override
@@ -94,10 +91,10 @@ public class AppMover {
                 if (id == 0 && line != null && line.length() > 0) {
                     Log.d(TAG, line);
                     if (line.contains(packageName)) {
-                        errorCode.value = ERROR_NONE;
+                        errorCode.value = ErrorCode.NONE;
                     }
                     else if (line.contains("fail")) {
-                        errorCode.value = ERROR_BUSYBOX;
+                        errorCode.value = ErrorCode.BUSYBOX;
                     }
                 }
             }
@@ -109,13 +106,13 @@ public class AppMover {
         }
         catch (IOException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            errorCode.value = ERROR_BUSYBOX;
+            errorCode.value = ErrorCode.BUSYBOX;
         } catch (InterruptedException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            errorCode.value = ERROR_BUSYBOX;
+            errorCode.value = ErrorCode.BUSYBOX;
         } catch (TimeoutException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-            errorCode.value = ERROR_BUSYBOX;
+            errorCode.value = ErrorCode.BUSYBOX;
         }
 
         return errorCode.value;
@@ -129,7 +126,7 @@ public class AppMover {
      * @return the error code or ERROR_NONE if OK
      */
     public static int appFitsOnPartition(String packageName, String partition) {
-        final ErrorCode errorCode = new ErrorCode(ERROR_INSUFFICIENT_SPACE);
+        final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.INSUFFICIENT_SPACE);
         long freeDiskSpace = RootTools.getSpace("/" + partition);
         long apkSpace = 0;
 
@@ -149,7 +146,7 @@ public class AppMover {
         Log.d(TAG, "Required disk space for APK: " + apkSpace);
 
         if ((apkSpace > 0) && (freeDiskSpace > apkSpace)) {
-            errorCode.value = ERROR_NONE;
+            errorCode.value = ErrorCode.NONE;
         }
         return errorCode.value;
     }
@@ -176,27 +173,27 @@ public class AppMover {
     }
 
     public static int moveAppEx(String packageName, String sourcePartition, String targetPartition, int flags) {
-        final ErrorCode errorCode = new ErrorCode(ERROR_NONE);
+        final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NONE);
         boolean needRemountSystem = (sourcePartition.equals(PARTITION_SYSTEM) || targetPartition.equals(PARTITION_SYSTEM));
         if (needRemountSystem) {
             if (!RootTools.remount("/system", "RW")) {
-                errorCode.value = ERROR_REMOUNT_SYSTEM;
+                errorCode.value = ErrorCode.REMOUNT_SYSTEM;
             }
         }
 
-        if (errorCode.value == ERROR_NONE) {
+        if (errorCode.value == ErrorCode.NONE) {
             // install or remove system app
             String shellCmd = "busybox mv /" + sourcePartition + "/app/" + packageName + "*.apk /" + targetPartition + "/app/";
             if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
                 errorCode.value = appExistsOnPartition(packageName, sourcePartition);
-                if (errorCode.value == AppMover.ERROR_NONE) {
+                if (errorCode.value == ErrorCode.NONE) {
                     // App is already existing in target partition, so just remove it from source partition
                     shellCmd = "busybox rm /" + sourcePartition + "/app/" + packageName + "*.apk";
                 }
             }
             Log.d(TAG, shellCmd);
 
-            if (errorCode.value == ERROR_NONE) {
+            if (errorCode.value == ErrorCode.NONE) {
                 // move APK to system partition or vice versa
                 Command command = new Command(1, shellCmd) {
 
@@ -214,13 +211,13 @@ public class AppMover {
                 }
                 catch (IOException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                    errorCode.value = ERROR_BUSYBOX;
+                    errorCode.value = ErrorCode.BUSYBOX;
                 } catch (InterruptedException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                    errorCode.value = ERROR_BUSYBOX;
+                    errorCode.value = ErrorCode.BUSYBOX;
                 } catch (TimeoutException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                    errorCode.value = ERROR_BUSYBOX;
+                    errorCode.value = ErrorCode.BUSYBOX;
                 }
 
                 if (needRemountSystem) {
