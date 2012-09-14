@@ -30,7 +30,7 @@ public class ShellService extends Service {
      * Starts the {@link ShellService} and prepares the result listener.
      *
      * Results from commands that are send to the service later are returned to the caller
-     * in the {@link AsyncShell.ResultListener}.
+     * in the {@link ResultListener}.
      *
      * Please note that the result is coming from a different thread. So you have to make
      * sure that result is send back to the UI thread, for instance by using a {@link android.os.Handler}.
@@ -39,7 +39,7 @@ public class ShellService extends Service {
      * @param useRoot True if you need a root shell.
      * @param listener Returns the command result.
      */
-    public static void create(Context context, boolean useRoot, final AsyncShell.ResultListener listener) {
+    public static void create(Context context, boolean useRoot, final ResultListener listener) {
         Intent i = new Intent(context, ShellService.class);
         i.putExtra("useRoot", useRoot);
         i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {

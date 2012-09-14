@@ -32,10 +32,6 @@ public class AsyncShell {
         w.execute();
     }
 
-    public interface ResultListener {
-        void onFinished(int exitCode, List<String> output);
-    }
-
     public static class Exec {
         public ArrayList<String> output;
 

@@ -354,18 +354,16 @@ public class ErrorReport {
 
     private void runLogTool(final String outputFile, final boolean append, final ErrorCodeListener listener) {
         final String logCommand = logTool + " " + logParams + (append ? " >> " : " > ") + outputFile;
-        new AsyncShell().send(true,
-                new String[] { logCommand },
-                new AsyncShell.ResultListener() {
-                    @Override
-                    public void onFinished(int exitCode, List<String> output) {
-                        addLogLines(outputFile, true, output);
-                        if (exitCode != 0) {
-                            listener.onResult(ErrorCode.LOGTOOL_FAILED);
-                        }
-                        else listener.onResult(ErrorCode.NONE);
-                    }
-                });
+        new AsyncShell().send(true, new String[] { logCommand },new ResultListener() {
+            @Override
+            public void onFinished(int exitCode, List<String> output) {
+                addLogLines(outputFile, true, output);
+                if (exitCode != 0) {
+                    listener.onResult(ErrorCode.LOGTOOL_FAILED);
+                }
+                else listener.onResult(ErrorCode.NONE);
+            }
+        });
     }
 
     private int verify() {

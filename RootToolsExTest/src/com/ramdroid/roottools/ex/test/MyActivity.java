@@ -7,6 +7,7 @@ import android.view.View;
 import android.widget.TextView;
 
 import com.ramdroid.roottools.ex.AsyncShell;
+import com.ramdroid.roottools.ex.ResultListener;
 import com.ramdroid.roottools.ex.ShellService;
 
 import java.util.List;
@@ -23,7 +24,7 @@ public class MyActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
-        ShellService.create(this, true, new AsyncShell.ResultListener() {
+        ShellService.create(this, true, new ResultListener() {
             @Override
             public void onFinished(int exitCode, final List<String> output) {
                 handler.post(new Runnable() {
