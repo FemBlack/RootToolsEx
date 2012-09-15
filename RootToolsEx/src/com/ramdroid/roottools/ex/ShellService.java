@@ -13,6 +13,9 @@ import java.util.List;
 
 /**
  * Service that keeps running in the background and waits for new shell commands.
+ *
+ * The {@link ShellService} class makes sure that all calls to a shell are not
+ * executed in the UI thread.
  */
 public class ShellService extends Service {
 

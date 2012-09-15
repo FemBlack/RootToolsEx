@@ -1,6 +1,5 @@
 package com.ramdroid.roottools.ex;
 
-import android.os.AsyncTask;
 import android.util.Log;
 import com.stericson.RootTools.RootTools;
 
@@ -10,6 +9,8 @@ import java.util.ArrayList;
 /**
  * APIs to move an app from one partition to another.
  *
+ * The {@link AppMover} class makes sure that all calls to a shell are not
+ * executed in the UI thread.
  */
 public class AppMover {
 
@@ -41,8 +42,8 @@ public class AppMover {
         }
         else {
             // otherwise pull up a root shell in a separate thread
-            new Worker(
-                    Worker.API_APPEXISTSONPARTITION,
+            new Common.Worker(
+                    Common.Worker.API_EX_APPEXISTSONPARTITION,
                     packageName,
                     partition,
                     listener).execute();
@@ -57,8 +58,8 @@ public class AppMover {
      * @param listener returns the error code when job is finished
      */
     public static void appFitsOnPartition(String packageName, String partition, ResultListener listener) {
-        new Worker(
-                Worker.API_APPFITSONPARTITION,
+        new Common.Worker(
+                Common.Worker.API_EX_APPFITSONPARTITION,
                 packageName,
                 partition,
                 listener).execute();
@@ -72,8 +73,8 @@ public class AppMover {
      * @param listener returns the error code when job is finished
      */
     public static void installSystemApp(String packageName, ResultListener listener) {
-        new Worker(
-                Worker.API_MOVEAPPEX,
+        new Common.Worker(
+                Common.Worker.API_EX_MOVEAPPEX,
                 packageName,
                 PARTITION_DATA,
                 PARTITION_SYSTEM,
@@ -88,8 +89,8 @@ public class AppMover {
      * @param listener returns the error code when job is finished
      */
     public static void removeSystemApp(String packageName, ResultListener listener) {
-        new Worker(
-                Worker.API_MOVEAPPEX,
+        new Common.Worker(
+                Common.Worker.API_EX_MOVEAPPEX,
                 packageName,
                 PARTITION_SYSTEM,
                 PARTITION_DATA,
@@ -111,8 +112,8 @@ public class AppMover {
      * @param listener listener returns the error code when job is finished
      */
     public static void moveAppEx(String packageName, String partition, String target, int flags, ResultListener listener) {
-        new Worker(
-                Worker.API_MOVEAPPEX,
+        new Common.Worker(
+                Common.Worker.API_EX_MOVEAPPEX,
                 packageName,
                 partition,
                 target,
@@ -120,73 +121,8 @@ public class AppMover {
     }
 
     /**
-     * Worker to execute all shell commands in a separate thread.
-     */
-    private static class Worker extends AsyncTask<Integer, Void, Integer> {
-
-        private static final int API_APPEXISTSONPARTITION   = 1;
-        private static final int API_APPFITSONPARTITION     = 2;
-        private static final int API_MOVEAPPEX              = 3;
-
-        private int api;
-        private String packageName;
-        private String partition;
-        private String target;
-        private ResultListener listener;
-        private AsyncShell.Exec exec;
-
-        private Worker(int api, String packageName, String partition, ResultListener listener) {
-            this.api = api;
-            this.packageName = packageName;
-            this.partition = partition;
-            this.listener = listener;
-        }
-
-        private Worker(int api, String packageName, String partition, String target, ResultListener listener) {
-            this.api = api;
-            this.packageName = packageName;
-            this.partition = partition;
-            this.target = target;
-            this.listener = listener;
-        }
-
-        @Override
-        protected Integer doInBackground(Integer... flags) {
-
-            int errorCode = ErrorCode.NONE;
-            exec = new AsyncShell.Exec(true);
-
-            // fire up some action
-            if (api == API_APPEXISTSONPARTITION) {
-                errorCode = Internal.appExistsOnPartition(exec, packageName, partition);
-            }
-            else if (api == API_APPFITSONPARTITION) {
-                errorCode = Internal.appFitsOnPartition(packageName, partition);
-            }
-            else if (api == API_MOVEAPPEX) {
-                if ((flags[0] & FLAG_CHECKSPACE) == FLAG_CHECKSPACE) {
-                    errorCode = Internal.appFitsOnPartition(packageName, target);
-                }
-                if (errorCode == ErrorCode.NONE) {
-                    errorCode = Internal.moveAppEx(exec, packageName, partition, target, flags[0]);
-                }
-            }
-
-            exec.destroy();
-
-            return errorCode;
-        }
-
-        protected void onPostExecute(Integer errorCode) {
-            if (listener != null) {
-                listener.onFinished(errorCode, exec.output);
-            }
-        }
-    }
-
-    /**
      * Blocking shell commands that are doing all the hard work.
-     * They are called by the {@link Worker} to avoid blocking the UI thread.
+     * They are called by the {@link Common.Worker} to avoid blocking the UI thread.
      */
     static class Internal {
 
@@ -201,7 +137,7 @@ public class AppMover {
             int value;
         }
 
-        private static int appExistsOnPartition(AsyncShell.Exec exec, String packageName, String partition) {
+        public static int appExistsOnPartition(AsyncShell.Exec exec, String packageName, String partition) {
             final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NOT_EXISTING);
             if (partition.equals(PARTITION_SYSTEM)) {
                 File root = new File("/" + partition + "/app/");
@@ -222,7 +158,7 @@ public class AppMover {
             return errorCode.value;
         }
 
-        private static int appExistsOnPartitionWithRoot(AsyncShell.Exec exec, final String packageName, String partition) {
+        public static int appExistsOnPartitionWithRoot(AsyncShell.Exec exec, final String packageName, String partition) {
             final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NOT_EXISTING);
 
             commandId += 1;
@@ -245,7 +181,7 @@ public class AppMover {
             return errorCode.value;
         }
 
-        private static int appFitsOnPartition(String packageName, String partition) {
+        public static int appFitsOnPartition(String packageName, String partition) {
             final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.INSUFFICIENT_SPACE);
             long freeDiskSpace = RootTools.getSpace("/" + partition);
             long apkSpace = 0;
@@ -271,7 +207,7 @@ public class AppMover {
             return errorCode.value;
         }
 
-        private static int moveAppEx(AsyncShell.Exec exec, String packageName, String sourcePartition, String targetPartition, int flags) {
+        public static int moveAppEx(AsyncShell.Exec exec, String packageName, String sourcePartition, String targetPartition, int flags) {
             final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NONE);
             boolean needRemountSystem = (sourcePartition.equals(PARTITION_SYSTEM) || targetPartition.equals(PARTITION_SYSTEM));
             if (needRemountSystem) {

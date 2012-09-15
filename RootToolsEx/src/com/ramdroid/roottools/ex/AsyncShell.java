@@ -12,7 +12,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * Wrapper around the new shell interface from RootTools.
  *
- * Calls to AsyncShell don't block, so you can call it from the UI thread.
+ * Calls to {@link AsyncShell} don't block, so you can call it from the UI thread.
  */
 public class AsyncShell {
 
