@@ -12,7 +12,7 @@ import com.ramdroid.roottools.ex.ShellService;
 
 import java.util.List;
 
-public class MyActivity extends Activity {
+public class ShellServiceActivity extends Activity {
 
     private Handler handler = new Handler();
 
@@ -22,7 +22,7 @@ public class MyActivity extends Activity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.main);
+        setContentView(R.layout.shellservice);
 
         ShellService.create(this, true, new ResultListener() {
             @Override

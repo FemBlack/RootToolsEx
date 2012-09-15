@@ -7,8 +7,8 @@
     <Button
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:text="ShellService"
-            android:onClick="onShellService" />
+            android:text="@string/all_the_ramdroids"
+            android:onClick="doSomething" />
 
     <TextView
             android:id="@+id/result"
