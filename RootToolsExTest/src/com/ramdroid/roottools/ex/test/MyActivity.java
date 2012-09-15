@@ -46,7 +46,7 @@ public class MyActivity extends Activity {
     public void onPause() {
         super.onPause();
 
-        ShellService.destroy(this);
+        ShellService.close(this);
     }
 
     public void doSomething(View v) {

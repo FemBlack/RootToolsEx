@@ -7,31 +7,41 @@ import com.stericson.RootTools.Shell;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 /**
  * Wrapper around the new shell interface from RootTools.
  *
- * Calls to the shell don't block, so you can call it from the main thread.
+ * Calls to AsyncShell don't block, so you can call it from the UI thread.
  */
 public class AsyncShell {
 
     private ResultListener listener;
-
     private static int commandId = 0;
 
+    /**
+     * Executes one or more commands in a shell.
+     *
+     * @param useRoot True if you need a root shell
+     * @param command One or more commands
+     * @param listener Returns the result code and shell output.
+     */
     public void send(boolean useRoot, String[] command, ResultListener listener) {
         this.listener = listener;
-        commandId += 1;
-
-        Worker w = new Worker();
-        w.useRoot = useRoot;
-        w.commandId = commandId;
-        w.command = command;
-        w.execute();
+        this.commandId += 1;
+        new Worker(useRoot, commandId, command).execute();
     }
 
+    /**
+     * Wrapper class around the shell class from RootTools.
+     *
+     * When using {@link AsyncShell} with the send(..) command then you don't need to
+     * bother about this class. It's used internally by the {@link Worker} to execute
+     * the shell commands.
+     *
+     * The class is still declared public because it's also used by other classes like
+     * {@link ShellService} or {@link AppMover}.
+     */
     public static class Exec {
         public ArrayList<String> output;
 
@@ -79,12 +89,21 @@ public class AsyncShell {
         }
     }
 
+    /**
+     * Used by {@link AsyncShell} to run shell commands in a separate thread.
+     */
     private class Worker extends AsyncTask<Boolean, Void, Integer> {
 
         private Exec exec;
         private boolean useRoot;
         private int commandId;
         private String[] command;
+
+        public Worker(boolean useRoot, int commandId, String[] command) {
+            this.useRoot = useRoot;
+            this.commandId = commandId;
+            this.command = command;
+        }
 
         protected Integer doInBackground(Boolean... params) {
             exec = new Exec(useRoot);

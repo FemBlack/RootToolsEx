@@ -60,7 +60,7 @@ public class ShellService extends Service {
      *
      * @param context Context of the caller.
      */
-    public static void destroy(Context context) {
+    public static void close(Context context) {
         context.stopService(new Intent(context, ShellService.class));
     }
 

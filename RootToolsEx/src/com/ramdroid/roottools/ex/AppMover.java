@@ -2,14 +2,10 @@ package com.ramdroid.roottools.ex;
 
 import android.os.AsyncTask;
 import android.util.Log;
-import com.stericson.RootTools.Command;
 import com.stericson.RootTools.RootTools;
-import com.stericson.RootTools.Shell;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.concurrent.TimeoutException;
 
 /**
  * APIs to move an app from one partition to another.
@@ -132,12 +128,12 @@ public class AppMover {
         private static final int API_APPFITSONPARTITION     = 2;
         private static final int API_MOVEAPPEX              = 3;
 
+        private int api;
         private String packageName;
         private String partition;
         private String target;
         private ResultListener listener;
-        private ArrayList<String> output = new ArrayList<String>();
-        private int api;
+        private AsyncShell.Exec exec;
 
         private Worker(int api, String packageName, String partition, ResultListener listener) {
             this.api = api;
@@ -157,51 +153,33 @@ public class AppMover {
         @Override
         protected Integer doInBackground(Integer... flags) {
 
-            // TODO: use AsyncShell.Exec instead
-
-            // get ourselves a root shell
             int errorCode = ErrorCode.NONE;
-            Shell rootShell = null;
-            try {
-                rootShell = RootTools.getShell(true);
-            } catch (IOException e) {
-                output.add(e.toString());
-                errorCode = ErrorCode.NO_ROOT_SHELL;
-            } catch (TimeoutException e) {
-                output.add(e.toString());
-                errorCode = ErrorCode.NO_ROOT_SHELL;
+            exec = new AsyncShell.Exec(true);
+
+            // fire up some action
+            if (api == API_APPEXISTSONPARTITION) {
+                errorCode = Internal.appExistsOnPartition(exec, packageName, partition);
+            }
+            else if (api == API_APPFITSONPARTITION) {
+                errorCode = Internal.appFitsOnPartition(packageName, partition);
+            }
+            else if (api == API_MOVEAPPEX) {
+                if ((flags[0] & FLAG_CHECKSPACE) == FLAG_CHECKSPACE) {
+                    errorCode = Internal.appFitsOnPartition(packageName, target);
+                }
+                if (errorCode == ErrorCode.NONE) {
+                    errorCode = Internal.moveAppEx(exec, packageName, partition, target, flags[0]);
+                }
             }
 
-            if (rootShell != null) {
-                // fire some action
-                if (api == API_APPEXISTSONPARTITION) {
-                    errorCode = Internal.appExistsOnPartition(rootShell, packageName, partition);
-                }
-                else if (api == API_APPFITSONPARTITION) {
-                    errorCode = Internal.appFitsOnPartition(packageName, partition);
-                }
-                else if (api == API_MOVEAPPEX) {
-                    if ((flags[0] & FLAG_CHECKSPACE) == FLAG_CHECKSPACE) {
-                        errorCode = Internal.appFitsOnPartition(packageName, target);
-                    }
-                    if (errorCode == ErrorCode.NONE) {
-                        errorCode = Internal.moveAppEx(rootShell, packageName, partition, target, flags[0]);
-                    }
-                }
-
-                // close shell
-                try {
-                    rootShell.close();
-                } catch (IOException e) {
-                }
-            }
+            exec.destroy();
 
             return errorCode;
         }
 
         protected void onPostExecute(Integer errorCode) {
             if (listener != null) {
-                listener.onFinished(errorCode, output);
+                listener.onFinished(errorCode, exec.output);
             }
         }
     }
@@ -213,6 +191,7 @@ public class AppMover {
     static class Internal {
 
         private static final String TAG = "AppMover";
+        private static int commandId = 0;
 
         private static class ErrorWrapper {
 
@@ -222,7 +201,7 @@ public class AppMover {
             int value;
         }
 
-        private static int appExistsOnPartition(Shell rootShell, String packageName, String partition) {
+        private static int appExistsOnPartition(AsyncShell.Exec exec, String packageName, String partition) {
             final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NOT_EXISTING);
             if (partition.equals(PARTITION_SYSTEM)) {
                 File root = new File("/" + partition + "/app/");
@@ -238,36 +217,28 @@ public class AppMover {
                 }
             }
             else {
-                return Internal.appExistsOnPartitionWithRoot(rootShell, packageName, partition);
+                return Internal.appExistsOnPartitionWithRoot(exec, packageName, partition);
             }
             return errorCode.value;
         }
 
-        private static int appExistsOnPartitionWithRoot(Shell rootShell, final String packageName, String partition) {
+        private static int appExistsOnPartitionWithRoot(AsyncShell.Exec exec, final String packageName, String partition) {
             final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NOT_EXISTING);
-            Command command = new Command(0, "busybox ls /" + partition + "/app | grep " + packageName) {
 
-                @Override
-                public void output(int id, String line) {
-                    if (id == 0 && line != null && line.length() > 0) {
-                        Log.d(TAG, line);
-                        if (line.contains(packageName)) {
-                            errorCode.value = ErrorCode.NONE;
-                        }
-                        else if (line.contains("fail")) {
-                            errorCode.value = ErrorCode.BUSYBOX;
-                        }
+            commandId += 1;
+            int exitCode = exec.run(commandId, "busybox ls /" + partition + "/app | grep " + packageName);
+            if (exitCode == 0) {
+                for (String line : exec.output) {
+                    Log.d(TAG, line);
+                    if (line.contains(packageName)) {
+                        errorCode.value = ErrorCode.NONE;
+                    }
+                    else if (line.contains("fail")) {
+                        errorCode.value = ErrorCode.BUSYBOX;
                     }
                 }
-            };
-            try {
-                rootShell.add(command).waitForFinish();
             }
-            catch (IOException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                errorCode.value = ErrorCode.BUSYBOX;
-            } catch (InterruptedException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            else {
                 errorCode.value = ErrorCode.BUSYBOX;
             }
 
@@ -300,7 +271,7 @@ public class AppMover {
             return errorCode.value;
         }
 
-        private static int moveAppEx(Shell rootShell, String packageName, String sourcePartition, String targetPartition, int flags) {
+        private static int moveAppEx(AsyncShell.Exec exec, String packageName, String sourcePartition, String targetPartition, int flags) {
             final ErrorWrapper errorCode = new ErrorWrapper(ErrorCode.NONE);
             boolean needRemountSystem = (sourcePartition.equals(PARTITION_SYSTEM) || targetPartition.equals(PARTITION_SYSTEM));
             if (needRemountSystem) {
@@ -313,7 +284,7 @@ public class AppMover {
                 // install or remove system app
                 String shellCmd = "busybox mv /" + sourcePartition + "/app/" + packageName + "*.apk /" + targetPartition + "/app/";
                 if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
-                    errorCode.value = appExistsOnPartition(rootShell, packageName, sourcePartition);
+                    errorCode.value = appExistsOnPartition(exec, packageName, targetPartition);
                     if (errorCode.value == ErrorCode.NONE) {
                         // App is already existing in target partition, so just remove it from source partition
                         shellCmd = "busybox rm /" + sourcePartition + "/app/" + packageName + "*.apk";
@@ -326,23 +297,9 @@ public class AppMover {
 
                 if (errorCode.value == ErrorCode.NONE) {
                     // move APK to system partition or vice versa
-                    Command command = new Command(1, new String[] { shellCmd }) {
-
-                        @Override
-                        public void output(int id, String line) {
-                            if (id == 1 && line != null && line.length() > 0) {
-                                Log.d(TAG, line);
-                            }
-                        }
-                    };
-                    try {
-                        rootShell.add(command).waitForFinish();
-                    }
-                    catch (IOException e) {
-                        e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                        errorCode.value = ErrorCode.BUSYBOX;
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                    commandId += 1;
+                    int exitCode = exec.run(commandId, shellCmd);
+                    if (exitCode != 0) {
                         errorCode.value = ErrorCode.BUSYBOX;
                     }
                 }

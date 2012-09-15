@@ -1,7 +1,7 @@
 package com.ramdroid.roottools.ex;
 
 /**
- * Global list of all error codes.
+ * Global list of all error codes used by the RootToolsEx classes.
  */
 public class ErrorCode {
 
@@ -15,5 +15,4 @@ public class ErrorCode {
     public static final int NOT_EXISTING            = 7;
     public static final int INSUFFICIENT_SPACE      = 8;
     public static final int REMOUNT_SYSTEM          = 9;
-    public static final int NO_ROOT_SHELL           = 10;
 }
