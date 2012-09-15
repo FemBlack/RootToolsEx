@@ -28,8 +28,8 @@ public class Common {
      *
      * @param listener Returns the result: NONE if OK, or BUSYBOX on failure
      */
-    public static void isBusyboxAvailable(ResultListener listener) {
-        new Worker(Worker.API_ISBUSYBOXAVAILABLE, listener).execute();
+    public static void gotBusybox(ResultListener listener) {
+        new Worker(Worker.API_GOTBUSYBOX, listener).execute();
     }
 
     /**
@@ -39,7 +39,7 @@ public class Common {
 
         // RootTools wrapper APIs
         public static final int API_GOTROOT                     = 1;
-        public static final int API_ISBUSYBOXAVAILABLE          = 2;
+        public static final int API_GOTBUSYBOX                  = 2;
 
         // More APIs that are not part of the RootTools classes
         public static final int API_EX_APPEXISTSONPARTITION     = 100;
@@ -92,7 +92,7 @@ public class Common {
                 }
                 errorCode = gotRoot ? ErrorCode.NONE : ErrorCode.NO_ROOT_ACCESS;
             }
-            else if (api == API_ISBUSYBOXAVAILABLE) {
+            else if (api == API_GOTBUSYBOX) {
                 String version = RootTools.getBusyBoxVersion();
                 boolean available = (version != null && version.length() > 0);
                 errorCode = available ? ErrorCode.NONE : ErrorCode.BUSYBOX;

@@ -251,17 +251,25 @@ public class ErrorReport {
     private void createReport(final ErrorCodeListener listener) {
         // initialize output file
         int result = ErrorCode.NONE;
-        String outputFile = getOutputFile();
+        final String outputFile = getOutputFile();
         if (outputFile == null) {
             result = ErrorCode.ACCESS_OUTPUTFILE;
         }
 
         // include header with system info, running tasks, etc.
         if (result == ErrorCode.NONE) {
-            result = createSystemInfo(outputFile);
+            prepareSystemInfo(outputFile, new ErrorCodeListener() {
+                @Override
+                public void onResult(int errorCode) {
+                    attachLogReport(outputFile, listener);
+                }
+            });
         }
+        else attachLogReport(outputFile, listener);
+    }
 
-        // attach log report
+    private void attachLogReport(String outputFile, final ErrorCodeListener listener) {
+        int result = ErrorCode.NONE;
         if (result == ErrorCode.NONE) {
             boolean append = includeSystemInfo || includeRunningProcesses;
             runLogTool(outputFile, append, new ErrorCodeListener() {
@@ -274,7 +282,29 @@ public class ErrorReport {
         else listener.onResult(result);
     }
 
-    private int createSystemInfo(String outputFile) {
+    private void prepareSystemInfo(final String outputFile, final ErrorCodeListener listener) {
+        if (includeSystemInfo) {
+            // get version information of su binary
+            new AsyncShell().send(false, new String[] { "su -v"}, new ResultListener() {
+                @Override
+                public void onFinished(int errorCode, List<String> output) {
+                    String suVersion = "Unknown";
+                    if (errorCode == ErrorCode.NONE && output.size() > 0) {
+                        for (String line : output) {
+                            if (line.length() > 0) {
+                                suVersion = line;
+                                break;
+                            }
+                        }
+                    }
+                    listener.onResult(createSystemInfo(outputFile, suVersion));
+                }
+            });
+        }
+        else listener.onResult(createSystemInfo(outputFile, null));
+    }
+
+    private int createSystemInfo(String outputFile, String suVersion) {
         int result = ErrorCode.NONE;
         List<String> logLines = new ArrayList<String>();
 
@@ -298,6 +328,7 @@ public class ErrorReport {
                 logLines.add("Brand:            " + Build.BRAND);
                 logLines.add("Device:           " + Build.DEVICE);
                 logLines.add("Product:          " + Build.PRODUCT);
+                logLines.add("Su binary:        " + suVersion);
             }
             logLines.add("");
             logLines.add("");
