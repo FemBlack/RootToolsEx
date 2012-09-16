@@ -290,12 +290,7 @@ public class ErrorReport {
                 public void onFinished(int errorCode, List<String> output) {
                     String suVersion = "Unknown";
                     if (errorCode == ErrorCode.NONE && output.size() > 0) {
-                        for (String line : output) {
-                            if (line.length() > 0) {
-                                suVersion = line;
-                                break;
-                            }
-                        }
+                        suVersion = output.get(0);
                     }
                     listener.onResult(createSystemInfo(outputFile, suVersion));
                 }

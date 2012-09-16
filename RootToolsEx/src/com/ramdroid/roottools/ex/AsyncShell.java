@@ -59,7 +59,7 @@ public class AsyncShell {
 
                 @Override
                 public void output(int id, String line) {
-                    if (line != null && id == commandId) {
+                    if (id == commandId && line != null && line.length() > 0) {
                         output.add(line);
                     }
                 }
