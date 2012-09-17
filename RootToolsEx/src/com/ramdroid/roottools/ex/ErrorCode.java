@@ -16,4 +16,5 @@ public class ErrorCode {
     public static final int INSUFFICIENT_SPACE      = 8;
     public static final int REMOUNT_SYSTEM          = 9;
     public static final int NO_ROOT_ACCESS          = 10;
+    public static final int NO_EXTERNAL_STORAGE     = 11;
 }

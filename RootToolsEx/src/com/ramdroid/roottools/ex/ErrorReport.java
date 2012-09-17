@@ -8,6 +8,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -396,6 +397,13 @@ public class ErrorReport {
         if (emailAddress.length() < 1) {
             return ErrorCode.MISSING_EMAILADDRESS;
         }
+
+        // check if external storage is available
+        String state = Environment.getExternalStorageState();
+        if (!Environment.MEDIA_MOUNTED.equals(state)) {
+            return ErrorCode.NO_EXTERNAL_STORAGE;
+        }
+
         return ErrorCode.NONE;
     }
 }
