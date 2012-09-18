@@ -17,4 +17,6 @@ public class ErrorCode {
     public static final int REMOUNT_SYSTEM          = 9;
     public static final int NO_ROOT_ACCESS          = 10;
     public static final int NO_EXTERNAL_STORAGE     = 11;
+    public static final int TIMEOUT                 = 12;
+    public static final int COMMAND_FAILED          = 13;
 }

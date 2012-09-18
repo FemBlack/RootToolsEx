@@ -53,7 +53,7 @@ public class AsyncShell {
         }
 
         public int run(final int commandId, String... command) {
-            int exitCode = -1;
+            int errorCode = ErrorCode.COMMAND_FAILED;
             output = new ArrayList<String>();
             Command cmd = new Command(commandId, command) {
 
@@ -67,15 +67,22 @@ public class AsyncShell {
 
             try {
                 rootShell = RootTools.getShell(useRoot);
-                exitCode = rootShell.add(cmd).exitCode();
+                int exitCode = rootShell.add(cmd).exitCode();
+                if (exitCode == 0) {
+                    errorCode = ErrorCode.NONE;
+                }
             } catch (IOException e) {
                 output.add(e.toString());
             } catch (InterruptedException e) {
                 output.add(e.toString());
             } catch (TimeoutException e) {
                 output.add(e.toString());
+                errorCode = ErrorCode.TIMEOUT;
+            } catch (Shell.RootDeniedException e) {
+                output.add(e.toString());
+                errorCode = ErrorCode.NO_ROOT_ACCESS;
             }
-            return exitCode;
+            return errorCode;
         }
 
         public void destroy() {
@@ -107,18 +114,18 @@ public class AsyncShell {
 
         protected Integer doInBackground(Boolean... params) {
             exec = new Exec(useRoot);
-            int exitCode = exec.run(commandId, command);
+            int errorCode = exec.run(commandId, command);
             exec.destroy();
-            return exitCode;
+            return errorCode;
         }
 
         protected void onPreExecute() {
 
         }
 
-        protected void onPostExecute(Integer exitCode) {
+        protected void onPostExecute(Integer errorCode) {
             if (listener != null) {
-                listener.onFinished(exitCode, exec.output);
+                listener.onFinished(errorCode, exec.output);
             }
         }
     }

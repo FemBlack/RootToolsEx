@@ -49,9 +49,9 @@ public class ShellService extends Service {
             @Override
             protected void onReceiveResult(int resultCode, Bundle resultData) {
                 if (resultCode == RESULT_ID_QUOTE) {
-                    int exitCode = resultData.getInt("exitCode");
+                    int errorCode = resultData.getInt("errorCode");
                     List<String> output = resultData.getStringArrayList("output");
-                    listener.onFinished(exitCode, output);
+                    listener.onFinished(errorCode, output);
                 }
             }
         });
@@ -120,11 +120,11 @@ public class ShellService extends Service {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    int exitCode = shellExec.run(commandId, cmd);
+                    int errorCode = shellExec.run(commandId, cmd);
 
                     if (resultReceiver != null) {
                         Bundle resultData = new Bundle();
-                        resultData.putInt("exitCode", exitCode);
+                        resultData.putInt("errorCode", errorCode);
                         resultData.putStringArrayList("output", shellExec.output);
                         resultReceiver.send(RESULT_ID_QUOTE, resultData);
                     }
