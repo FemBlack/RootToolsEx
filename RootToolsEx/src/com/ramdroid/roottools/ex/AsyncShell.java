@@ -16,7 +16,7 @@ import java.util.concurrent.TimeoutException;
  */
 public class AsyncShell {
 
-    private ResultListener listener;
+    private ErrorCode.OutputListener listener;
     private static int commandId = 0;
 
     /**
@@ -26,7 +26,7 @@ public class AsyncShell {
      * @param command One or more commands
      * @param listener Returns the result code and shell output.
      */
-    public void send(boolean useRoot, String[] command, ResultListener listener) {
+    public void send(boolean useRoot, String[] command, ErrorCode.OutputListener listener) {
         this.listener = listener;
         this.commandId += 1;
         new Worker(useRoot, commandId, command).execute();
@@ -125,7 +125,7 @@ public class AsyncShell {
 
         protected void onPostExecute(Integer errorCode) {
             if (listener != null) {
-                listener.onFinished(errorCode, exec.output);
+                listener.onResult(errorCode, exec.output);
             }
         }
     }

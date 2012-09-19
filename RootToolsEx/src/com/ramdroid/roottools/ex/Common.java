@@ -19,7 +19,7 @@ public class Common {
      *
      * @param listener Returns the result: NONE if OK, or NO_ROOT_ACCESS on failure
      */
-    public static void gotRoot(ResultListener listener) {
+    public static void gotRoot(ErrorCode.OutputListener listener) {
         new Worker(Worker.API_GOTROOT, listener).execute();
     }
 
@@ -28,7 +28,7 @@ public class Common {
      *
      * @param listener Returns the result: NONE if OK, or BUSYBOX on failure
      */
-    public static void gotBusybox(ResultListener listener) {
+    public static void gotBusybox(ErrorCode.OutputListener listener) {
         new Worker(Worker.API_GOTBUSYBOX, listener).execute();
     }
 
@@ -50,22 +50,22 @@ public class Common {
         private String packageName;
         private String partition;
         private String target;
-        private ResultListener listener;
+        private ErrorCode.OutputListener listener;
         private AsyncShell.Exec exec;
 
-        public Worker(int api, ResultListener listener) {
+        public Worker(int api, ErrorCode.OutputListener listener) {
             this.api = api;
             this.listener = listener;
         }
 
-        public Worker(int api, String packageName, String partition, ResultListener listener) {
+        public Worker(int api, String packageName, String partition, ErrorCode.OutputListener listener) {
             this.api = api;
             this.packageName = packageName;
             this.partition = partition;
             this.listener = listener;
         }
 
-        public Worker(int api, String packageName, String partition, String target, ResultListener listener) {
+        public Worker(int api, String packageName, String partition, String target, ErrorCode.OutputListener listener) {
             this.api = api;
             this.packageName = packageName;
             this.partition = partition;
@@ -119,7 +119,7 @@ public class Common {
 
         protected void onPostExecute(Integer errorCode) {
             if (listener != null) {
-                listener.onFinished(errorCode, exec.output);
+                listener.onResult(errorCode, exec.output);
             }
         }
     }

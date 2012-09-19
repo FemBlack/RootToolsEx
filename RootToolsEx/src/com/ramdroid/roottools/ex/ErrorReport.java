@@ -7,6 +7,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Environment;
 
@@ -19,6 +20,7 @@ import java.util.List;
 
 /**
  * Generates an error report and sends an intent to send it by email or another service of choice.
+ * All shell action is executed in a separate thread so you don't have to bother.
  *
  * In the most simple solution you just have to add a valid email address:
  *
@@ -61,21 +63,28 @@ public class ErrorReport {
     /**
      * Creates the error report and opens the intent chooser dialog.
      *
-     * @return Returns 0 if successful, otherwise an error code.
+     * @param listener Returns the error code or ERROR_NONE if successful
      */
-    public int send() {
-        int result = verify();
-        if (result == ErrorCode.NONE) {
-            createReport(new ErrorCodeListener() {
-                @Override
-                public void onResult(int errorCode) {
-                    if (errorCode == ErrorCode.NONE || errorCode == ErrorCode.LOGTOOL_FAILED) {
-                        sendIntent();
-                    }
-                }
-            });
+    public void send(ErrorCode.Listener listener) {
+        int errorCode = verify();
+        if (errorCode == ErrorCode.NONE) {
+            new Worker(context, listener).execute();
         }
-        return result;
+        else listener.onResult(errorCode);
+    }
+
+    private int verify() {
+        if (emailAddress.length() < 1) {
+            return ErrorCode.MISSING_EMAILADDRESS;
+        }
+
+        // check if external storage is available
+        String state = Environment.getExternalStorageState();
+        if (!Environment.MEDIA_MOUNTED.equals(state)) {
+            return ErrorCode.NO_EXTERNAL_STORAGE;
+        }
+
+        return ErrorCode.NONE;
     }
 
     /**
@@ -221,189 +230,174 @@ public class ErrorReport {
 
     }
 
-    private String getOutputFile() {
-        String outputFile = null;
-        try {
-            File ext = context.getExternalFilesDir(null);
-            if (ext.isDirectory()) {
-                File f = new File(ext, logFile);
-                outputFile = f.getPath();
+    /**
+     * Worker to execute all shell commands in a separate thread.
+     */
+    private class Worker extends AsyncTask<Integer, Void, Integer> {
+
+        private Context context;
+        private ErrorCode.Listener listener;
+        private AsyncShell.Exec exec;
+        private int commandId = 0;
+
+        public Worker(Context context, ErrorCode.Listener listener) {
+            this.context = context;
+            this.listener = listener;
+        }
+
+        @Override
+        protected Integer doInBackground(Integer... flags) {
+            int errorCode = ErrorCode.NONE;
+            exec = new AsyncShell.Exec(true);
+
+            // initialize output file
+            final String outputFile = getOutputFile();
+            if (outputFile == null) {
+                errorCode = ErrorCode.ACCESS_OUTPUTFILE;
             }
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-        }
-        return outputFile;
-    }
 
-    private void sendIntent() {
-        Intent emailIntent = new Intent(android.content.Intent.ACTION_SEND);
-        emailIntent.setType("text/plain");
-        emailIntent.putExtra(android.content.Intent.EXTRA_EMAIL, new String[] {emailAddress});
-        emailIntent.putExtra(android.content.Intent.EXTRA_SUBJECT, emailSubject);
-        emailIntent.putExtra(android.content.Intent.EXTRA_TEXT, emailText);
-        emailIntent.putExtra(Intent.EXTRA_STREAM, Uri.parse("file://" + getOutputFile()));
-
-        Intent launchIntent = Intent.createChooser(emailIntent, chooserTitle);
-        launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(launchIntent);
-    }
-
-    private void createReport(final ErrorCodeListener listener) {
-        // initialize output file
-        int result = ErrorCode.NONE;
-        final String outputFile = getOutputFile();
-        if (outputFile == null) {
-            result = ErrorCode.ACCESS_OUTPUTFILE;
-        }
-
-        // include header with system info, running tasks, etc.
-        if (result == ErrorCode.NONE) {
-            prepareSystemInfo(outputFile, new ErrorCodeListener() {
-                @Override
-                public void onResult(int errorCode) {
-                    attachLogReport(outputFile, listener);
-                }
-            });
-        }
-        else attachLogReport(outputFile, listener);
-    }
-
-    private void attachLogReport(String outputFile, final ErrorCodeListener listener) {
-        int result = ErrorCode.NONE;
-        if (result == ErrorCode.NONE) {
-            boolean append = includeSystemInfo || includeRunningProcesses;
-            runLogTool(outputFile, append, new ErrorCodeListener() {
-                @Override
-                public void onResult(int errorCode) {
-                    listener.onResult(errorCode);
-                }
-            });
-        }
-        else listener.onResult(result);
-    }
-
-    private void prepareSystemInfo(final String outputFile, final ErrorCodeListener listener) {
-        if (includeSystemInfo) {
-            // get version information of su binary
-            new AsyncShell().send(false, new String[] { "su -v"}, new ResultListener() {
-                @Override
-                public void onFinished(int errorCode, List<String> output) {
-                    String suVersion = "Unknown";
-                    if (errorCode == ErrorCode.NONE && output.size() > 0) {
-                        suVersion = output.get(0);
+            if (errorCode == ErrorCode.NONE) {
+                // get version information of su binary
+                String suVersion = "Unknown";
+                if (includeSystemInfo) {
+                    commandId += 1;
+                    errorCode = exec.run(commandId, new String[] { "su -v"});
+                    if (errorCode == ErrorCode.NONE && exec.output.size() > 0) {
+                        suVersion = exec.output.get(0);
                     }
-                    listener.onResult(createSystemInfo(outputFile, suVersion));
                 }
-            });
-        }
-        else listener.onResult(createSystemInfo(outputFile, null));
-    }
 
-    private int createSystemInfo(String outputFile, String suVersion) {
-        int result = ErrorCode.NONE;
-        List<String> logLines = new ArrayList<String>();
+                // add header with system information
+                createSystemInfo(outputFile, suVersion);
 
-        if (includeSystemInfo) {
-            ApplicationInfo appInfo = null;
-            PackageInfo pInfo = null;
-            try {
-                final PackageManager pm = context.getPackageManager();
-                appInfo = pm.getApplicationInfo(context.getPackageName(), 0);
-                pInfo = pm.getPackageInfo(context.getPackageName(), 0);
-            } catch (PackageManager.NameNotFoundException e) {
-                result = ErrorCode.INVALID_CONTEXT;
-            }
-            if (result == ErrorCode.NONE) {
-                CharSequence appLabel = context.getPackageManager().getApplicationLabel(appInfo);
-                logLines.add("App version:      " + appLabel + " " + pInfo.versionName + " (" + pInfo.versionCode + ")");
-                logLines.add("Android:          " + Build.VERSION.RELEASE + " (" + Build.VERSION.CODENAME + ")");
-                logLines.add("Build ID:         " + Build.DISPLAY);
-                logLines.add("Manufacturer:     " + Build.MANUFACTURER);
-                logLines.add("Model:            " + Build.MODEL);
-                logLines.add("Brand:            " + Build.BRAND);
-                logLines.add("Device:           " + Build.DEVICE);
-                logLines.add("Product:          " + Build.PRODUCT);
-                logLines.add("Su binary:        " + suVersion);
-            }
-            logLines.add("");
-            logLines.add("");
-        }
-
-        if (includeRunningProcesses) {
-            final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-            final List<ActivityManager.RunningAppProcessInfo> runningProcesses = activityManager.getRunningAppProcesses();
-            logLines.add("Running processes:");
-            logLines.add("");
-            for (ActivityManager.RunningAppProcessInfo processInfo : runningProcesses) {
-                logLines.add(processInfo.processName + " (" + processInfo.pid + ")");
-            }
-            logLines.add("");
-            logLines.add("");
-        }
-
-        return addLogLines(outputFile, false, logLines);
-    }
-
-    private int addLogLines(String outputFile, boolean append, List<String> logLines) {
-        int result = ErrorCode.NONE;
-        if (logLines.size() > 0) {
-            // write into output file
-            FileOutputStream f = null;
-            try {
-                f = new FileOutputStream(new File(outputFile), append);
-                for(String line : logLines) {
-                    f.write((line + "\n").getBytes());
+                // run log tool
+                final boolean append = includeSystemInfo || includeRunningProcesses;
+                final String logCommand = logTool + " " + logParams + (append ? " >> " : " > ") + outputFile;
+                commandId += 1;
+                errorCode = exec.run(commandId, new String[] { logCommand });
+                if (errorCode != ErrorCode.NONE) {
+                    addLogLines(outputFile, true, exec.output);
                 }
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                result = ErrorCode.WRITE_SYSTEM_INFO;
-            } catch (IOException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                result = ErrorCode.WRITE_SYSTEM_INFO;
             }
-            finally {
+            exec.destroy();
+            return errorCode;
+        }
+
+        private int createSystemInfo(String outputFile, String suVersion) {
+            int result = ErrorCode.NONE;
+            List<String> logLines = new ArrayList<String>();
+
+            if (includeSystemInfo) {
+                ApplicationInfo appInfo = null;
+                PackageInfo pInfo = null;
                 try {
-                    if (f != null) {
-                        f.flush();
-                        f.close();
-                    }
+                    final PackageManager pm = context.getPackageManager();
+                    appInfo = pm.getApplicationInfo(context.getPackageName(), 0);
+                    pInfo = pm.getPackageInfo(context.getPackageName(), 0);
+                } catch (PackageManager.NameNotFoundException e) {
+                    result = ErrorCode.INVALID_CONTEXT;
+                }
+                if (result == ErrorCode.NONE) {
+                    CharSequence appLabel = context.getPackageManager().getApplicationLabel(appInfo);
+                    logLines.add("App version:      " + appLabel + " " + pInfo.versionName + " (" + pInfo.versionCode + ")");
+                    logLines.add("Android:          " + Build.VERSION.RELEASE + " (" + Build.VERSION.CODENAME + ")");
+                    logLines.add("Build ID:         " + Build.DISPLAY);
+                    logLines.add("Manufacturer:     " + Build.MANUFACTURER);
+                    logLines.add("Model:            " + Build.MODEL);
+                    logLines.add("Brand:            " + Build.BRAND);
+                    logLines.add("Device:           " + Build.DEVICE);
+                    logLines.add("Product:          " + Build.PRODUCT);
+                    logLines.add("Su binary:        " + suVersion);
+                }
+                logLines.add("");
+                logLines.add("");
+            }
 
+            if (includeRunningProcesses) {
+                final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+                final List<ActivityManager.RunningAppProcessInfo> runningProcesses = activityManager.getRunningAppProcesses();
+                logLines.add("Running processes:");
+                logLines.add("");
+                for (ActivityManager.RunningAppProcessInfo processInfo : runningProcesses) {
+                    logLines.add(processInfo.processName + " (" + processInfo.pid + ")");
+                }
+                logLines.add("");
+                logLines.add("");
+            }
+
+            return addLogLines(outputFile, false, logLines);
+        }
+
+        private int addLogLines(String outputFile, boolean append, List<String> logLines) {
+            int result = ErrorCode.NONE;
+            if (logLines.size() > 0) {
+                // write into output file
+                FileOutputStream f = null;
+                try {
+                    f = new FileOutputStream(new File(outputFile), append);
+                    for(String line : logLines) {
+                        f.write((line + "\n").getBytes());
+                    }
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                    result = ErrorCode.WRITE_SYSTEM_INFO;
                 } catch (IOException e) {
                     e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
                     result = ErrorCode.WRITE_SYSTEM_INFO;
                 }
+                finally {
+                    try {
+                        if (f != null) {
+                            f.flush();
+                            f.close();
+                        }
 
-            }
-        }
-        return result;
-    }
+                    } catch (IOException e) {
+                        e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                        result = ErrorCode.WRITE_SYSTEM_INFO;
+                    }
 
-    private void runLogTool(final String outputFile, final boolean append, final ErrorCodeListener listener) {
-        final String logCommand = logTool + " " + logParams + (append ? " >> " : " > ") + outputFile;
-        new AsyncShell().send(true, new String[] { logCommand },new ResultListener() {
-            @Override
-            public void onFinished(int exitCode, List<String> output) {
-                addLogLines(outputFile, true, output);
-                if (exitCode != 0) {
-                    listener.onResult(ErrorCode.LOGTOOL_FAILED);
                 }
-                else listener.onResult(ErrorCode.NONE);
             }
-        });
-    }
-
-    private int verify() {
-        if (emailAddress.length() < 1) {
-            return ErrorCode.MISSING_EMAILADDRESS;
+            return result;
         }
 
-        // check if external storage is available
-        String state = Environment.getExternalStorageState();
-        if (!Environment.MEDIA_MOUNTED.equals(state)) {
-            return ErrorCode.NO_EXTERNAL_STORAGE;
+        private String getOutputFile() {
+            String outputFile = null;
+            try {
+                File ext = context.getExternalFilesDir(null);
+                if (ext.isDirectory()) {
+                    File f = new File(ext, logFile);
+                    outputFile = f.getPath();
+                }
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+            }
+            return outputFile;
         }
 
-        return ErrorCode.NONE;
+        private void sendIntent() {
+            Intent emailIntent = new Intent(android.content.Intent.ACTION_SEND);
+            emailIntent.setType("text/plain");
+            emailIntent.putExtra(android.content.Intent.EXTRA_EMAIL, new String[] {emailAddress});
+            emailIntent.putExtra(android.content.Intent.EXTRA_SUBJECT, emailSubject);
+            emailIntent.putExtra(android.content.Intent.EXTRA_TEXT, emailText);
+            emailIntent.putExtra(Intent.EXTRA_STREAM, Uri.parse("file://" + getOutputFile()));
+
+            Intent launchIntent = Intent.createChooser(emailIntent, chooserTitle);
+            launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(launchIntent);
+        }
+
+        protected void onPostExecute(Integer errorCode) {
+            if (errorCode != ErrorCode.ACCESS_OUTPUTFILE) {
+                sendIntent();
+            }
+
+            if (listener != null) {
+                listener.onResult(errorCode);
+            }
+        }
     }
 }
