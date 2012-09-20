@@ -1,126 +1,165 @@
 package com.ramdroid.roottools.ex;
 
 import android.os.AsyncTask;
-import com.stericson.RootTools.Command;
 import com.stericson.RootTools.RootTools;
-import com.stericson.RootTools.Shell;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.concurrent.TimeoutException;
 
 /**
- * Wrapper around the new shell interface from RootTools.
+ * Wrapper around some common RootTools APIs.
  *
- * Calls to {@link AsyncShell} don't block, so you can call it from the UI thread.
+ * The {@link AsyncShell} class makes sure that all calls to a shell are not
+ * executed in the UI thread.
+ *
+ * Note: there are also some APIs used by {@link AppMover} that are not
+ * part of the RootTools APIs.
  */
 public class AsyncShell {
 
-    private ErrorCode.OutputListener listener;
-    private static int commandId = 0;
-
     /**
-     * Executes one or more commands in a shell.
+     * Check if root access is available and if we can get access.
      *
-     * @param useRoot True if you need a root shell
-     * @param command One or more commands
-     * @param listener Returns the result code and shell output.
+     * @param listener Returns the result: NONE if OK, or NO_ROOT_ACCESS on failure
      */
-    public void send(boolean useRoot, String[] command, ErrorCode.OutputListener listener) {
-        this.listener = listener;
-        this.commandId += 1;
-        new Worker(useRoot, commandId, command).execute();
+    public static void gotRoot(ErrorCode.OutputListener listener) {
+        new Worker(Worker.API_GOTROOT, listener).execute();
     }
 
     /**
-     * Wrapper class around the shell class from RootTools.
+     * Check if busybox is available.
      *
-     * When using {@link AsyncShell} with the send(..) command then you don't need to
-     * bother about this class. It's used internally by the {@link Worker} to execute
-     * the shell commands.
-     *
-     * The class is still declared public because it's also used by other classes like
-     * {@link ShellService} or {@link AppMover}.
+     * @param listener Returns the result: NONE if OK, or BUSYBOX on failure
      */
-    public static class Exec {
-        public ArrayList<String> output;
+    public static void gotBusybox(ErrorCode.OutputListener listener) {
+        new Worker(Worker.API_GOTBUSYBOX, listener).execute();
+    }
 
-        private Shell rootShell;
+    /**
+     * Send a command to a shell.
+     *
+     * @param useRoot true if you need a root shell
+     * @param command the command
+     * @param listener Returns the error code and shell output
+     */
+    public static void send(boolean useRoot, String command, ErrorCode.OutputListener listener) {
+        new Worker(Worker.API_EX_SEND, useRoot, command, listener).execute();    
+    }
+
+    /**
+     * Send a list of commands to a shell.
+     *
+     * @param useRoot true if you need a root shell
+     * @param commands the commands
+     * @param listener Returns the error code and shell output
+     */
+    public static void send(boolean useRoot, String[] commands, ErrorCode.OutputListener listener) {
+        new Worker(Worker.API_EX_SEND, useRoot, commands, listener).execute();
+    }
+
+    /**
+     * Worker to execute all shell commands in a separate thread.
+     */
+    public static class Worker extends AsyncTask<Integer, Void, Integer> {
+
+        // RootTools wrapper APIs
+        public static final int API_GOTROOT                     = 1;
+        public static final int API_GOTBUSYBOX                  = 2;
+
+        // More APIs that are not part of the RootTools classes
+        public static final int API_EX_SEND                     = 100;
+        public static final int API_EX_APPEXISTSONPARTITION     = 101;
+        public static final int API_EX_APPFITSONPARTITION       = 102;
+        public static final int API_EX_MOVEAPPEX                = 103;
+
+        private int api;
+        private String packageName;
+        private String partition;
+        private String target;
+        private String[] commands;
+        private ErrorCode.OutputListener listener;
+        private ShellExec exec;
         private boolean useRoot;
 
-        public Exec(boolean useRoot) {
+        public Worker(int api, ErrorCode.OutputListener listener) {
+            this.api = api;
+            this.listener = listener;
+            this.useRoot = true;
+        }
+        
+        public Worker(int api, boolean useRoot, String command, ErrorCode.OutputListener listener) {
+            this.api = api;  
             this.useRoot = useRoot;
+            this.commands[0] = command;
+            this.listener = listener;
         }
 
-        public int run(final int commandId, String... command) {
-            int errorCode = ErrorCode.COMMAND_FAILED;
-            output = new ArrayList<String>();
-            Command cmd = new Command(commandId, command) {
+        public Worker(int api, boolean useRoot, String[] commands, ErrorCode.OutputListener listener) {
+            this.api = api;
+            this.useRoot = useRoot;
+            this.commands = commands;
+            this.listener = listener;
+        }
 
-                @Override
-                public void output(int id, String line) {
-                    if (id == commandId && line != null && line.length() > 0) {
-                        output.add(line);
+        public Worker(int api, String packageName, String partition, ErrorCode.OutputListener listener) {
+            this.api = api;
+            this.packageName = packageName;
+            this.partition = partition;
+            this.listener = listener;
+            this.useRoot = true;
+        }
+
+        public Worker(int api, String packageName, String partition, String target, ErrorCode.OutputListener listener) {
+            this.api = api;
+            this.packageName = packageName;
+            this.partition = partition;
+            this.target = target;
+            this.listener = listener;
+            this.useRoot = true;
+        }
+
+        @Override
+        protected Integer doInBackground(Integer... flags) {
+
+            int errorCode = ErrorCode.NONE;
+            exec = new ShellExec(useRoot);
+
+            // fire up some action
+            if (api == API_GOTROOT) {
+                boolean gotRoot = false;
+                try {
+                    if (RootTools.isRootAvailable() && RootTools.isAccessGiven()) {
+                        gotRoot = true;
                     }
+                } catch (Exception e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
                 }
-            };
-
-            try {
-                rootShell = RootTools.getShell(useRoot);
-                int exitCode = rootShell.add(cmd).exitCode();
-                if (exitCode == 0) {
-                    errorCode = ErrorCode.NONE;
-                }
-            } catch (IOException e) {
-                output.add(e.toString());
-            } catch (InterruptedException e) {
-                output.add(e.toString());
-            } catch (TimeoutException e) {
-                output.add(e.toString());
-                errorCode = ErrorCode.TIMEOUT;
-            } catch (Shell.RootDeniedException e) {
-                output.add(e.toString());
-                errorCode = ErrorCode.NO_ROOT_ACCESS;
+                errorCode = gotRoot ? ErrorCode.NONE : ErrorCode.NO_ROOT_ACCESS;
             }
-            return errorCode;
-        }
-
-        public void destroy() {
-            try {
-                if (rootShell != null) {
-                    rootShell.close();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            else if (api == API_GOTBUSYBOX) {
+                String version = RootTools.getBusyBoxVersion();
+                boolean available = (version != null && version.length() > 0);
+                errorCode = available ? ErrorCode.NONE : ErrorCode.BUSYBOX;
             }
-        }
-    }
+            else if (api == API_EX_SEND) {
+                errorCode = exec.run(commands);
+            }
+            else if (api == API_EX_APPEXISTSONPARTITION) {
+                errorCode = AppMover.Internal.appExistsOnPartition(exec, packageName, partition);
+            }
+            else if (api == API_EX_APPFITSONPARTITION) {
+                errorCode = AppMover.Internal.appFitsOnPartition(packageName, partition);
+            }
+            else if (api == API_EX_MOVEAPPEX) {
+                if ((flags[0] & AppMover.FLAG_CHECKSPACE) == AppMover.FLAG_CHECKSPACE) {
+                    errorCode = AppMover.Internal.appFitsOnPartition(packageName, target);
+                }
+                if (errorCode == ErrorCode.NONE) {
+                    errorCode = AppMover.Internal.moveAppEx(exec, packageName, partition, target, flags[0]);
+                }
+            }
 
-    /**
-     * Used by {@link AsyncShell} to run shell commands in a separate thread.
-     */
-    private class Worker extends AsyncTask<Boolean, Void, Integer> {
-
-        private Exec exec;
-        private boolean useRoot;
-        private int commandId;
-        private String[] command;
-
-        public Worker(boolean useRoot, int commandId, String[] command) {
-            this.useRoot = useRoot;
-            this.commandId = commandId;
-            this.command = command;
-        }
-
-        protected Integer doInBackground(Boolean... params) {
-            exec = new Exec(useRoot);
-            int errorCode = exec.run(commandId, command);
             exec.destroy();
+
             return errorCode;
-        }
-
-        protected void onPreExecute() {
-
         }
 
         protected void onPostExecute(Integer errorCode) {
@@ -129,5 +168,4 @@ public class AsyncShell {
             }
         }
     }
-
 }

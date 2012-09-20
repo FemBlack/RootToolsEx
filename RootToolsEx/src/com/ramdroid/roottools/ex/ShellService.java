@@ -25,8 +25,7 @@ public class ShellService extends Service {
     private static final int RESULT_ID_QUOTE = 42;
 
     private CommandReceiver receiver;
-    private AsyncShell.Exec shellExec;
-    private int commandId;
+    private ShellExec shellExec;
     private ResultReceiver resultReceiver;
 
     /**
@@ -42,7 +41,7 @@ public class ShellService extends Service {
      * @param useRoot True if you need a root shell.
      * @param listener Returns the command result.
      */
-    public static void create(Context context, boolean useRoot, final ErrorCode.OutputListener listener) {
+    public static void start(Context context, boolean useRoot, final ErrorCode.OutputListener listener) {
         Intent i = new Intent(context, ShellService.class);
         i.putExtra("useRoot", useRoot);
         i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
@@ -63,7 +62,7 @@ public class ShellService extends Service {
      *
      * @param context Context of the caller.
      */
-    public static void close(Context context) {
+    public static void stop(Context context) {
         context.stopService(new Intent(context, ShellService.class));
     }
 
@@ -91,8 +90,7 @@ public class ShellService extends Service {
 
         // init shell
         boolean useRoot = intent.getBooleanExtra("useRoot", true);
-        shellExec = new AsyncShell.Exec(useRoot);
-        commandId = 0;
+        shellExec = new ShellExec(useRoot);
 
         // register intent receiver
         IntentFilter filter = new IntentFilter();
@@ -115,18 +113,19 @@ public class ShellService extends Service {
         @Override
         public void onReceive(Context context, Intent intent) {
             final String cmd = intent.getStringExtra("cmd");
-            commandId += 1;
 
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    int errorCode = shellExec.run(commandId, cmd);
+                    synchronized (shellExec) {
+                        int errorCode = shellExec.run(cmd);
 
-                    if (resultReceiver != null) {
-                        Bundle resultData = new Bundle();
-                        resultData.putInt("errorCode", errorCode);
-                        resultData.putStringArrayList("output", shellExec.output);
-                        resultReceiver.send(RESULT_ID_QUOTE, resultData);
+                        if (resultReceiver != null) {
+                            Bundle resultData = new Bundle();
+                            resultData.putInt("errorCode", errorCode);
+                            resultData.putStringArrayList("output", shellExec.output);
+                            resultReceiver.send(RESULT_ID_QUOTE, resultData);
+                        }
                     }
                 }
             }).start();

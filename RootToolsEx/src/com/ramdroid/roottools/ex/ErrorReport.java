@@ -1,5 +1,6 @@
 package com.ramdroid.roottools.ex;
 
+import android.Manifest;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -76,6 +77,11 @@ public class ErrorReport {
     private int verify() {
         if (emailAddress.length() < 1) {
             return ErrorCode.MISSING_EMAILADDRESS;
+        }
+
+        // check required permission
+        if (context.checkCallingOrSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            return ErrorCode.MISSING_PERMISSION;
         }
 
         // check if external storage is available
@@ -237,8 +243,7 @@ public class ErrorReport {
 
         private Context context;
         private ErrorCode.Listener listener;
-        private AsyncShell.Exec exec;
-        private int commandId = 0;
+        private ShellExec exec;
 
         public Worker(Context context, ErrorCode.Listener listener) {
             this.context = context;
@@ -248,7 +253,7 @@ public class ErrorReport {
         @Override
         protected Integer doInBackground(Integer... flags) {
             int errorCode = ErrorCode.NONE;
-            exec = new AsyncShell.Exec(true);
+            exec = new ShellExec(true);
 
             // initialize output file
             final String outputFile = getOutputFile();
@@ -260,8 +265,7 @@ public class ErrorReport {
                 // get version information of su binary
                 String suVersion = "Unknown";
                 if (includeSystemInfo) {
-                    commandId += 1;
-                    errorCode = exec.run(commandId, new String[] { "su -v"});
+                    errorCode = exec.run(new String[] { "su -v"});
                     if (errorCode == ErrorCode.NONE && exec.output.size() > 0) {
                         suVersion = exec.output.get(0);
                     }
@@ -273,8 +277,7 @@ public class ErrorReport {
                 // run log tool
                 final boolean append = includeSystemInfo || includeRunningProcesses;
                 final String logCommand = logTool + " " + logParams + (append ? " >> " : " > ") + outputFile;
-                commandId += 1;
-                errorCode = exec.run(commandId, new String[] { logCommand });
+                errorCode = exec.run(new String[] { logCommand });
                 if (errorCode != ErrorCode.NONE) {
                     addLogLines(outputFile, true, exec.output);
                 }

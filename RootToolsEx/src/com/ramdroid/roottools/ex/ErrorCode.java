@@ -12,7 +12,7 @@ public class ErrorCode {
     public static final int MISSING_EMAILADDRESS    = 2;
     public static final int INVALID_CONTEXT         = 3;
     public static final int WRITE_SYSTEM_INFO       = 4;
-    public static final int LOGTOOL_FAILED          = 5;
+    public static final int MISSING_PERMISSION      = 5;
     public static final int BUSYBOX                 = 6;
     public static final int NOT_EXISTING            = 7;
     public static final int INSUFFICIENT_SPACE      = 8;

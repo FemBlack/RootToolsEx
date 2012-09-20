@@ -6,8 +6,7 @@ import android.os.Handler;
 import android.view.View;
 import android.widget.TextView;
 
-import com.ramdroid.roottools.ex.AsyncShell;
-import com.ramdroid.roottools.ex.ResultListener;
+import com.ramdroid.roottools.ex.ErrorCode.OutputListener;
 import com.ramdroid.roottools.ex.ShellService;
 
 import java.util.List;
@@ -24,9 +23,14 @@ public class ShellServiceActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.shellservice);
 
-        ShellService.create(this, true, new ResultListener() {
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        ShellService.start(this, true, new OutputListener() {
             @Override
-            public void onFinished(int exitCode, final List<String> output) {
+            public void onResult(int exitCode, final List<String> output) {
                 handler.post(new Runnable() {
 
                     @Override
@@ -46,7 +50,7 @@ public class ShellServiceActivity extends Activity {
     public void onPause() {
         super.onPause();
 
-        ShellService.close(this);
+        ShellService.stop(this);
     }
 
     public void doSomething(View v) {
