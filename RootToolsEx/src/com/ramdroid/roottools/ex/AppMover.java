@@ -42,8 +42,8 @@ public class AppMover {
         }
         else {
             // otherwise pull up a root shell in a separate thread
-            new AsyncShell.Worker(
-                    com.ramdroid.roottools.ex.AsyncShell.Worker.API_EX_APPEXISTSONPARTITION,
+            new ShellExec.Worker(
+                    ShellExec.API_EX_APPEXISTSONPARTITION,
                     packageName,
                     partition,
                     listener).execute();
@@ -58,8 +58,8 @@ public class AppMover {
      * @param listener returns the error code when job is finished
      */
     public static void appFitsOnPartition(String packageName, String partition, ErrorCode.OutputListener listener) {
-        new AsyncShell.Worker(
-                com.ramdroid.roottools.ex.AsyncShell.Worker.API_EX_APPFITSONPARTITION,
+        new ShellExec.Worker(
+                ShellExec.API_EX_APPFITSONPARTITION,
                 packageName,
                 partition,
                 listener).execute();
@@ -73,8 +73,8 @@ public class AppMover {
      * @param listener returns the error code when job is finished
      */
     public static void installSystemApp(String packageName, ErrorCode.OutputListener listener) {
-        new AsyncShell.Worker(
-                com.ramdroid.roottools.ex.AsyncShell.Worker.API_EX_MOVEAPPEX,
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
                 packageName,
                 PARTITION_DATA,
                 PARTITION_SYSTEM,
@@ -89,8 +89,8 @@ public class AppMover {
      * @param listener returns the error code when job is finished
      */
     public static void removeSystemApp(String packageName, ErrorCode.OutputListener listener) {
-        new AsyncShell.Worker(
-                com.ramdroid.roottools.ex.AsyncShell.Worker.API_EX_MOVEAPPEX,
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
                 packageName,
                 PARTITION_SYSTEM,
                 PARTITION_DATA,
@@ -112,8 +112,8 @@ public class AppMover {
      * @param listener listener returns the error code when job is finished
      */
     public static void moveAppEx(String packageName, String partition, String target, int flags, ErrorCode.OutputListener listener) {
-        new AsyncShell.Worker(
-                com.ramdroid.roottools.ex.AsyncShell.Worker.API_EX_MOVEAPPEX,
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
                 packageName,
                 partition,
                 target,
@@ -122,7 +122,7 @@ public class AppMover {
 
     /**
      * Blocking shell commands that are doing all the hard work.
-     * They are called by the {@link AsyncShell.Worker} to avoid blocking the UI thread.
+     * They are called by the {@link ShellExec.Worker} to avoid blocking the UI thread.
      */
     static class Internal {
 
