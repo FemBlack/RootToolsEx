@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.view.View;
 import android.widget.TextView;
 
+import com.ramdroid.roottools.ex.CommandBuilder;
 import com.ramdroid.roottools.ex.ErrorCode.OutputListener;
 import com.ramdroid.roottools.ex.ShellService;
 
@@ -30,7 +31,7 @@ public class ShellServiceActivity extends Activity {
         super.onResume();
         ShellService.start(this, true, new OutputListener() {
             @Override
-            public void onResult(int exitCode, final List<String> output) {
+            public void onResult(int errorCode, final List<String> output) {
                 handler.post(new Runnable() {
 
                     @Override
@@ -57,4 +58,10 @@ public class ShellServiceActivity extends Activity {
         ((TextView) findViewById(R.id.result)).setText("");
         ShellService.send(this, "ls /data/data | grep com.ramdroid");
     }
+
+    public void doSomeMore(View v) {
+        ((TextView) findViewById(R.id.result)).setText("");
+        ShellService.send(this, new CommandBuilder().add("ls /data/dalvik-cache | grep com.ramdroid"));
+    }
+
 }

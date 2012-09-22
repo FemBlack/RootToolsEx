@@ -67,14 +67,34 @@ public class ShellService extends Service {
     }
 
     /**
-     * Sends a command to the {@link ShellService}.
+     * Sends a command to the {@link ShellService}. This is the
+     * straight-forward solution if you only need to send one
+     * simple command at a time.
      *
      * @param context Context of the caller.
      * @param cmd the command to execute in the shell.
      */
     public static void send(Context context, String cmd) {
+        Bundle data = new Bundle();
+        data.putString("cmd", cmd);
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
-        i.putExtra("cmd", cmd);
+        i.putExtras(data);
+        context.sendBroadcast(i);
+    }
+
+    /**
+     * Sends one or more commands to the {@link ShellService}.
+     * The {@link CommandBuilder} is used to construct the command.
+     * In the future this allows to use more options like e.g. timeouts.
+     *
+     * @param context Context of the caller.
+     * @param builder the {@link CommandBuilder} object
+     */
+    public static void send(Context context, CommandBuilder builder) {
+        Bundle data = new Bundle();
+        data.putParcelable("builder", builder);
+        Intent i = new Intent(ACTION_SEND_SHELL_CMD);
+        i.putExtras(data);
         context.sendBroadcast(i);
     }
 
@@ -112,13 +132,22 @@ public class ShellService extends Service {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            final String cmd = intent.getStringExtra("cmd");
+            final Bundle data = intent.getExtras();
+            final String cmd = data.getString("cmd");
+            final CommandBuilder builder = data.getParcelable("builder");
 
             new Thread(new Runnable() {
                 @Override
                 public void run() {
                     synchronized (shellExec) {
-                        int errorCode = shellExec.run(cmd);
+                        int errorCode = ErrorCode.NONE;
+                        if (cmd != null) {
+                            shellExec.run(cmd);
+                        }
+                        else if (builder != null) {
+                            String[] commands = builder.commands.toArray(new String[builder.commands.size()]);
+                            shellExec.run(commands);
+                        }
 
                         if (resultReceiver != null) {
                             Bundle resultData = new Bundle();

@@ -70,11 +70,7 @@ public class AsyncShellActivity extends Activity {
     public void doSomething(View v) {
         result.setText("");
 
-        AsyncShell.send(new CommandBuilder()
-                .useRoot()
-                .add("ls /data/data | grep com.ramdroid")
-                ,
-                new OutputListener() {
+        AsyncShell.send(true, new CommandBuilder().add("ls /data/data | grep com.ramdroid"), new OutputListener() {
 
             @Override
             public void onResult(int errorCode, List<String> output) {

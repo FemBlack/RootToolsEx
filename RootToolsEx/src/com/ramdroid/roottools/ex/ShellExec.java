@@ -110,9 +110,9 @@ class ShellExec {
             this.listener = listener;
         }
 
-        public Worker(int api, CommandBuilder builder, ErrorCode.OutputListener listener) {
+        public Worker(int api, boolean useRoot, CommandBuilder builder, ErrorCode.OutputListener listener) {
             this.api = api;
-            this.useRoot = builder.useRoot;
+            this.useRoot = useRoot;
             this.commands = builder.commands.toArray(new String[builder.commands.size()]);
             this.listener = listener;
         }

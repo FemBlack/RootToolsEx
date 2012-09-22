@@ -10,6 +10,12 @@
             android:text="@string/all_the_ramdroids"
             android:onClick="doSomething" />
 
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/even_more_ramdroids"
+            android:onClick="doSomeMore" />
+
     <TextView
             android:id="@+id/result"
             android:textSize="17dp"

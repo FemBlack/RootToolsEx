@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">RootToolsExTest</string>
     <string name="all_the_ramdroids">ALL the ramdroids</string>
+    <string name="even_more_ramdroids">Even more ramdroids</string>
     <string name="got_root">Got root?</string>
     <string name="got_busybox">Got busybox?</string>
     <string name="root_OK">Root OK</string>
