@@ -10,16 +10,11 @@
             android:text="ShellService"
             android:onClick="onShellService" />
 
-    <TextView
-            android:id="@+id/result"
-            android:textSize="17dp"
-            android:textStyle="bold"
-            android:inputType="textMultiLine|textNoSuggestions"
-            android:maxLines="10"
-            android:scrollHorizontally="false"
+    <Button
             android:layout_width="fill_parent"
-            android:layout_height="fill_parent"
-            android:layout_marginTop="20dp"  />
+            android:layout_height="wrap_content"
+            android:text="AsyncShell"
+            android:onClick="onAsyncShell" />
 
 </LinearLayout>
 

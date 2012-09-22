@@ -110,10 +110,10 @@ class ShellExec {
             this.listener = listener;
         }
 
-        public Worker(int api, boolean useRoot, String[] commands, ErrorCode.OutputListener listener) {
+        public Worker(int api, CommandBuilder builder, ErrorCode.OutputListener listener) {
             this.api = api;
-            this.useRoot = useRoot;
-            this.commands = commands;
+            this.useRoot = builder.useRoot;
+            this.commands = builder.commands.toArray(new String[builder.commands.size()]);
             this.listener = listener;
         }
 
@@ -183,6 +183,9 @@ class ShellExec {
 
         protected void onPostExecute(Integer errorCode) {
             if (listener != null) {
+                if  (exec.output == null) {
+                    exec.output = new ArrayList<String>();
+                }
                 listener.onResult(errorCode, exec.output);
             }
         }

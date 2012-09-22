@@ -19,4 +19,8 @@ public class MainActivity extends Activity {
     public void onShellService(View v) {
         startActivity(new Intent(this, ShellServiceActivity.class));
     }
+
+    public void onAsyncShell(View v) {
+        startActivity(new Intent(this, AsyncShellActivity.class));
+    }
 }

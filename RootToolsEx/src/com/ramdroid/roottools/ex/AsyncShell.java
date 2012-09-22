@@ -30,7 +30,8 @@ public class AsyncShell {
     }
 
     /**
-     * Send a command to a shell.
+     * Send a command to a shell. This is the straight-forward solution if you only need to
+     * send one simple command at a time.
      *
      * @param useRoot true if you need a root shell
      * @param command the command
@@ -41,13 +42,14 @@ public class AsyncShell {
     }
 
     /**
-     * Send a list of commands to a shell.
+     * Send a list of commands to a shell. The list of commands is created using the
+     * {@link CommandBuilder}. This way we can add more options in the future without
+     * the need to create dozens of different send(..) commands.
      *
-     * @param useRoot true if you need a root shell
-     * @param commands the commands
+     * @param builder the list of commands created from a  {@link CommandBuilder}
      * @param listener Returns the error code and shell output
      */
-    public static void send(boolean useRoot, String[] commands, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(ShellExec.API_EX_SEND, useRoot, commands, listener).execute();
+    public static void send(CommandBuilder builder, ErrorCode.OutputListener listener) {
+        new ShellExec.Worker(ShellExec.API_EX_SEND, builder, listener).execute();
     }
 }
