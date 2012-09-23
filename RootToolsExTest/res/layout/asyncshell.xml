@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:orientation="vertical"
+              android:layout_width="fill_parent"
+              android:layout_height="fill_parent" >
+
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/got_root"
+            android:onClick="gotRoot" />
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/got_busybox"
+            android:onClick="gotBusybox" />
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/all_the_ramdroids"
+            android:onClick="doSomething" />
+
+    <TextView
+            android:id="@+id/result"
+            android:textSize="17dp"
+            android:textStyle="bold"
+            android:inputType="textMultiLine|textNoSuggestions"
+            android:maxLines="10"
+            android:scrollHorizontally="false"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:layout_marginTop="20dp"  />
+
+</LinearLayout>
+
