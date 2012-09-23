@@ -3,49 +3,17 @@ RootToolsEx
 
 This library is based on the great RootTools library by Stericson and Co. Of course this is not an attempt to replace RootTools at all but instead it adds more high-level functionality on top of RootTools.
 
-Design
-======
+The main purpose of the library is to make sure that shell commands are always executed in a separate thread. Therefore you can always call the APIs without blocking the main UI thread. Otherwise even the most simple functions like checking for root availablity might break your app. 
 
-In the RootTools project the RootTools class is used as the one and only interface to access the library's functionality. In RootToolsEx there is no such wrapper class. Instead each feature comes with it's own class for direct use.
+Here's some things you can do:
 
-The classes in RootToolsEx are not doing any checks if root access is available or not. It's your job to do this in your own app, as you'll probably do anyway.
+- Check if root access is available
+- Check if busybox is installed
+- Execute shell commands
+- Send many root commands over time using a service
+- Move apps between data/system partition
+- Generate logcat error reports
 
-Features
-========
+In this repository you will find both the main `RootToolsEx` library and a test app `RootToolsExTest` that demonstrates usage of some APIs in the library.
 
-Bear with me but in the initial version there's not so many features yet... Of course more features will be added as I continue to extract and pimp up more features that are/will be used in my own apps.
-
-#1 ErrorReport
-==============
-
-The `ErrorReport` class creates an error report that can be forwarded to the developer (usually I guess by email) using Android's intent chooser. The Builder pattern is used to let you customize the options as you need it. Here is an example as used in App Quarantine:
-
-        ErrorReport report = new ErrorReport.Builder(context)
-                .setChooserTitle(context.getString(R.string.senderrorreport))
-                .setEmailAddress("my-email-address-for-error-reports@gmail.com")
-                .setEmailSubject("App Quarantine error report")
-                .setEmailText("Hi ramdroid, here's my error report!")
-                .includeRunningProcesses()
-                .build();
-        report.send();
-
-Important: The `WRITE_EXTERNAL_STORAGE` permission is needed!
-
-#2 AppMover
-===========
-
-The `AppMover` class allows to move apps from data to system partition and vice versa. It also includes few utility functions, for instance you should check if there's enough space on system partition before trying to move over something. The interface is dead simple:
-
-        int errorCode = AppMover.appFitsOnPartition("com.example.myapp", AppMover.PARTITION_SYSTEM);
-        if (errorCode == AppMover.ERROR_INSUFFICIENT_SPACE) {
-        
-                // Insufficient space, drop an error message...
-        }
-        else if (errorCode != AppMover.ERROR_NONE) {
-        
-                // Some issues with root access or missing busybox...
-        }
-        else {
-                // Disk space OK, now do some action
-                AppMover.installSystemApp("com.example.myapp");
-        }
+In the WIKI you can read a more detailed description on all available APIs.
