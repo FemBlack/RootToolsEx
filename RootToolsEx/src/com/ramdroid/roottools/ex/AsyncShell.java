@@ -6,7 +6,7 @@ package com.ramdroid.roottools.ex;
  * The {@link AsyncShell} class makes sure that all calls to a shell are not
  * executed in the UI thread.
  *
- * Note: there are also some APIs used by {@link AppMover} that are not
+ * Note: there are also some APIs used by {@link AppManager} that are not
  * part of the RootTools APIs.
  */
 public class AsyncShell {
@@ -38,7 +38,7 @@ public class AsyncShell {
      * @param listener Returns the error code and shell output
      */
     public static void send(boolean useRoot, String command, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(ShellExec.API_EX_SEND, useRoot, command, listener).execute();
+        new ShellExec.Worker(ShellExec.API_SEND, useRoot, command, listener).execute();
     }
 
     /**
@@ -51,6 +51,6 @@ public class AsyncShell {
      * @param listener Returns the error code and shell output
      */
     public static void send(boolean useRoot, CommandBuilder builder, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(ShellExec.API_EX_SEND, useRoot, builder, listener).execute();
+        new ShellExec.Worker(ShellExec.API_SEND, useRoot, builder, listener).execute();
     }
 }

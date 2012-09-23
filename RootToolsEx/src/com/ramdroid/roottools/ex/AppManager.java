@@ -9,10 +9,10 @@ import java.util.ArrayList;
 /**
  * APIs to move an app from one partition to another.
  *
- * The {@link AppMover} class makes sure that all calls to a shell are not
+ * The {@link AppManager} class makes sure that all calls to a shell are not
  * executed in the UI thread.
  */
-public class AppMover {
+public class AppManager {
 
     public static final String PARTITION_DATA   = "data";
     public static final String PARTITION_SYSTEM = "system";

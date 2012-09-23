@@ -14,14 +14,14 @@ import java.util.concurrent.TimeoutException;
  * Wrapper around the new shell interface from RootTools.
  *
  * Calls to {@link ShellExec} are blocking the current thread.
- * Only for internal use in {@link AsyncShell} and {@link ShellService}!
+ * Only for internal use in {@link AsyncShell} and {@link ShellService}
  */
 class ShellExec {
 
     // RootTools wrapper APIs
     public static final int API_GOTROOT                     = 1;
     public static final int API_GOTBUSYBOX                  = 2;
-    public static final int API_EX_SEND                     = 3;
+    public static final int API_SEND                        = 3;
 
     // More APIs that are not part of the RootTools classes
     public static final int API_EX_APPEXISTSONPARTITION     = 101;
@@ -158,21 +158,21 @@ class ShellExec {
                 boolean available = (version != null && version.length() > 0);
                 errorCode = available ? ErrorCode.NONE : ErrorCode.BUSYBOX;
             }
-            else if (api == API_EX_SEND) {
+            else if (api == API_SEND) {
                 errorCode = exec.run(commands);
             }
             else if (api == API_EX_APPEXISTSONPARTITION) {
-                errorCode = AppMover.Internal.appExistsOnPartition(exec, packageName, partition);
+                errorCode = AppManager.Internal.appExistsOnPartition(exec, packageName, partition);
             }
             else if (api == API_EX_APPFITSONPARTITION) {
-                errorCode = AppMover.Internal.appFitsOnPartition(packageName, partition);
+                errorCode = AppManager.Internal.appFitsOnPartition(packageName, partition);
             }
             else if (api == API_EX_MOVEAPPEX) {
-                if ((flags[0] & AppMover.FLAG_CHECKSPACE) == AppMover.FLAG_CHECKSPACE) {
-                    errorCode = AppMover.Internal.appFitsOnPartition(packageName, target);
+                if ((flags[0] & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
+                    errorCode = AppManager.Internal.appFitsOnPartition(packageName, target);
                 }
                 if (errorCode == ErrorCode.NONE) {
-                    errorCode = AppMover.Internal.moveAppEx(exec, packageName, partition, target, flags[0]);
+                    errorCode = AppManager.Internal.moveAppEx(exec, packageName, partition, target, flags[0]);
                 }
             }
 
