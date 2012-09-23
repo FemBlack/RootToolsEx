@@ -17,3 +17,8 @@ Here's some things you can do:
 In this repository you will find both the main `RootToolsEx` library and a test app `RootToolsExTest` that demonstrates usage of some APIs in the library.
 
 In the WIKI you can read a more detailed description on all available APIs.
+
+License
+=======
+
+RootToolsEx is licensed under the Apache License. Feel free to use it in your free or paid Android apps. Please add a little note in your license info screen that you are using RootToolsEx and if possible include a link to this Github page. Vice versa you can send me a message so I can mention your app here as well.
