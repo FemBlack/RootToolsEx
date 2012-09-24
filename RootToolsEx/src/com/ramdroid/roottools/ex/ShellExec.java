@@ -122,7 +122,7 @@ class ShellExec {
         public Worker(int api, boolean useRoot, String command, ErrorCode.OutputListener listener) {
             this.api = api;
             this.useRoot = useRoot;
-            this.commands[0] = command;
+            this.commands = new String[] { command };
             this.listener = listener;
         }
 
