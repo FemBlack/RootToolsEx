@@ -166,10 +166,8 @@ public class AppManager {
         }
 
         public static int appExistsOnPartitionWithRoot(ShellExec exec, final String packageName, String partition) {
-            int errorCode = ErrorCode.NOT_EXISTING;
-
-            int exitCode = exec.run("busybox ls /" + partition + "/app | grep " + packageName);
-            if (exitCode == 0) {
+            int errorCode = exec.run("busybox ls /" + partition + "/app | grep " + packageName);
+            if (errorCode == ErrorCode.NONE) {
                 for (String line : exec.output) {
                     Log.d(TAG, line);
                     if (line.contains(packageName)) {
@@ -180,8 +178,15 @@ public class AppManager {
                     }
                 }
             }
+            else if (errorCode == ErrorCode.COMMAND_FAILED) {
+                // not found --> this is not an error
+                errorCode = ErrorCode.NOT_EXISTING;
+            }
             else {
-                errorCode = ErrorCode.BUSYBOX;
+                Log.d(TAG, "Error code: " + errorCode);
+                for (String line : exec.output) {
+                    Log.d(TAG, line);
+                }
             }
 
             return errorCode;

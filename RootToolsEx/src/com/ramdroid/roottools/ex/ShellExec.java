@@ -16,7 +16,9 @@ package com.ramdroid.roottools.ex;
  limitations under the License.
  */
 
+import android.nfc.Tag;
 import android.os.AsyncTask;
+import android.util.Log;
 import com.stericson.RootTools.Command;
 import com.stericson.RootTools.RootTools;
 import com.stericson.RootTools.Shell;
@@ -51,6 +53,8 @@ class ShellExec {
 
     private static int commandId = 0;
 
+    private static final String TAG = "ShellExec";
+
     public ShellExec(boolean useRoot) {
         this.useRoot = useRoot;
     }
@@ -59,10 +63,12 @@ class ShellExec {
         int errorCode = ErrorCode.COMMAND_FAILED;
         commandId += 1;
         output = new ArrayList<String>();
+        Log.d(TAG, "Cmd " + commandId + ": " + command.toString());
         Command cmd = new Command(commandId, command) {
 
             @Override
             public void output(int id, String line) {
+                Log.d(TAG, "ID " + id + ": " + line);
                 if (id == commandId && line != null && line.length() > 0) {
                     output.add(line);
                 }
