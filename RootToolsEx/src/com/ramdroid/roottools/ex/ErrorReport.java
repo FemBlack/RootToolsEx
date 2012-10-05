@@ -63,6 +63,7 @@ public class ErrorReport {
     private final String logFile;
     private final boolean includeSystemInfo;
     private final boolean includeRunningProcesses;
+    private final boolean includePartitionInfo;
 
     public ErrorReport(final Builder builder) {
         context = builder.context;
@@ -75,6 +76,7 @@ public class ErrorReport {
         logFile = builder.logFile;
         includeSystemInfo = builder.includeSystemInfo;
         includeRunningProcesses = builder.includeRunningProcesses;
+        includePartitionInfo = builder.includePartitionInfo;
     }
 
     /**
@@ -124,6 +126,7 @@ public class ErrorReport {
         private String logFile;
         private boolean includeSystemInfo;
         private boolean includeRunningProcesses;
+        private boolean includePartitionInfo;
 
         public Builder(Context context) {
             this.context = context;
@@ -233,6 +236,15 @@ public class ErrorReport {
         }
 
         /**
+         * Include a list of all partitions of the device including disk space statistics.
+         * @return Returns the {@link Builder}.
+         */
+        public Builder includePartitionInfo() {
+            this.includePartitionInfo = true;
+            return this;
+        }
+
+        /**
          * @return Returns a configured {@link ErrorReport} class.
          */
         public ErrorReport build() {
@@ -248,6 +260,7 @@ public class ErrorReport {
             logFile = "errorlog.txt";
             includeSystemInfo = true;
             includeRunningProcesses = false;
+            includePartitionInfo = false;
         }
 
     }
@@ -289,6 +302,17 @@ public class ErrorReport {
 
                 // add header with system information
                 createSystemInfo(outputFile, suVersion);
+
+                // add partition info?
+                if (includePartitionInfo) {
+                    errorCode = exec.run(new String[] { "df"});
+                    if (errorCode == ErrorCode.NONE && exec.output.size() > 0) {
+                        List<String> logLines = exec.output;
+                        logLines.add("");
+                        logLines.add("");
+                        addLogLines(outputFile, true, logLines);
+                    }
+                }
 
                 // run log tool
                 final boolean append = includeSystemInfo || includeRunningProcesses;
