@@ -16,12 +16,12 @@ package com.ramdroid.roottools.ex;
  limitations under the License.
  */
 
-import android.nfc.Tag;
 import android.os.AsyncTask;
 import android.util.Log;
-import com.stericson.RootTools.Command;
+import com.stericson.RootTools.exceptions.RootDeniedException;
+import com.stericson.RootTools.execution.Command;
 import com.stericson.RootTools.RootTools;
-import com.stericson.RootTools.Shell;
+import com.stericson.RootTools.execution.Shell;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -88,7 +88,7 @@ class ShellExec {
         } catch (TimeoutException e) {
             output.add(e.toString());
             errorCode = ErrorCode.TIMEOUT;
-        } catch (Shell.RootDeniedException e) {
+        } catch (RootDeniedException e) {
             output.add(e.toString());
             errorCode = ErrorCode.NO_ROOT_ACCESS;
         }
