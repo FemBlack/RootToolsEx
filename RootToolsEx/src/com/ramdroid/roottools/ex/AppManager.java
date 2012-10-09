@@ -35,6 +35,7 @@ public class AppManager {
 
     public static final int FLAG_OVERWRITE      = 1;
     public static final int FLAG_CHECKSPACE     = 2;
+    public static final int FLAG_REBOOT         = 3;
 
     /**
      * Check if an app is installed on a particular partition or not.
@@ -98,6 +99,23 @@ public class AppManager {
     }
 
     /**
+     * Moves an APK from DATA to SYSTEM partition and updates the APK if already existing.
+     * The available disk space is first checked on the SYSTEM partition before trying to move the APK.
+     *
+     * @param packageName Package name of the App e.g. com.example.myapp
+     * @param addFlags use additional flags e.g. FLAG_REBOOT
+     * @param listener returns the error code when job is finished
+     */
+    public static void installSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
+                packageName,
+                PARTITION_DATA,
+                PARTITION_SYSTEM,
+                listener).execute(FLAG_OVERWRITE | FLAG_CHECKSPACE | addFlags);
+    }
+
+    /**
      * Moves an APK from SYSTEM to DATA partition. If the APK was updated in the DATA partition then this APK
      * remains untouched and only the APK on system is removed.
      *
@@ -111,6 +129,23 @@ public class AppManager {
                 PARTITION_SYSTEM,
                 PARTITION_DATA,
                 listener).execute(0);
+    }
+
+    /**
+     * Moves an APK from SYSTEM to DATA partition. If the APK was updated in the DATA partition then this APK
+     * remains untouched and only the APK on system is removed.
+     *
+     * @param packageName Package name of the App e.g. com.example.myapp
+     * @param addFlags use additional flags e.g. FLAG_REBOOT
+     * @param listener returns the error code when job is finished
+     */
+    public static void removeSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
+                packageName,
+                PARTITION_SYSTEM,
+                PARTITION_DATA,
+                listener).execute(addFlags);
     }
 
     /**
@@ -250,6 +285,12 @@ public class AppManager {
                 if (needRemountSystem) {
                     // mount R/O
                     RootTools.remount("/system", "RO");
+                }
+
+                if (errorCode == ErrorCode.NONE) {
+                    if ((flags & FLAG_REBOOT) > 0) {
+                        exec.run("reboot");
+                    }
                 }
             }
             return errorCode;
