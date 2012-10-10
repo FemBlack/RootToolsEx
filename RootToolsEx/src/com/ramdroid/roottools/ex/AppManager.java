@@ -35,7 +35,7 @@ public class AppManager {
 
     public static final int FLAG_OVERWRITE      = 1;
     public static final int FLAG_CHECKSPACE     = 2;
-    public static final int FLAG_REBOOT         = 3;
+    public static final int FLAG_REBOOT         = 4;
 
     /**
      * Check if an app is installed on a particular partition or not.
