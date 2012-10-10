@@ -155,6 +155,7 @@ public class AppManager {
      *
      * FLAG_OVERWRITE   --> Overwrite the target if already existing
      * FLAG_CHECKSPACE  --> Check available diskspace before moving
+     * FLAG_REBOOT      --> Immediately reboot device when done
      *
      * @param packageName Package name of the App e.g. com.example.myapp
      * @param partition Source partition
