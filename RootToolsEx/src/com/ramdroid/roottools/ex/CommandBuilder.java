@@ -30,6 +30,7 @@ import java.util.ArrayList;
 public class CommandBuilder implements Parcelable {
 
     ArrayList<String> commands = new ArrayList<String>();
+    int timeout = 0;
 
     public CommandBuilder() {
     }
@@ -46,6 +47,18 @@ public class CommandBuilder implements Parcelable {
         return this;
     }
 
+    /**
+     * Set a custom timeout. If no timeout is set then the
+     * default value is used.
+     *
+     * @param timeout timeout in milliseconds
+     * @return the {@link CommandBuilder} object
+     */
+    public CommandBuilder setTimeout(int timeout) {
+        this.timeout = timeout;
+        return this;
+    }
+
     @Override
     public int describeContents() {
         return 0;  //To change body of implemented methods use File | Settings | File Templates.
@@ -54,10 +67,10 @@ public class CommandBuilder implements Parcelable {
     @Override
     public void writeToParcel(Parcel out, int flags) {
         out.writeStringList(commands);
+        out.writeInt(timeout);
     }
 
-    public static final Parcelable.Creator<CommandBuilder> CREATOR
-            = new Parcelable.Creator<CommandBuilder>() {
+    public static final Parcelable.Creator<CommandBuilder> CREATOR = new Parcelable.Creator<CommandBuilder>() {
         public CommandBuilder createFromParcel(Parcel in) {
             return new CommandBuilder(in);
         }
@@ -69,6 +82,7 @@ public class CommandBuilder implements Parcelable {
 
     private CommandBuilder(Parcel in) {
         in.readStringList(commands);
+        timeout = in.readInt();
     }
 
 }

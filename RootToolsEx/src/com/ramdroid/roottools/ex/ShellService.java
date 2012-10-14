@@ -162,7 +162,7 @@ public class ShellService extends Service {
                         }
                         else if (builder != null) {
                             String[] commands = builder.commands.toArray(new String[builder.commands.size()]);
-                            shellExec.run(commands);
+                            shellExec.run(builder.timeout, commands);
                         }
 
                         if (resultReceiver != null) {

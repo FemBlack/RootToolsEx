@@ -60,6 +60,10 @@ class ShellExec {
     }
 
     public int run(String... command) {
+        return run(0, command);
+    }
+
+    public int run(int timeout, String... command) {
         int errorCode = ErrorCode.COMMAND_FAILED;
         commandId += 1;
         output = new ArrayList<String>();
@@ -68,8 +72,8 @@ class ShellExec {
 
             @Override
             public void output(int id, String line) {
-                Log.d(TAG, "ID " + id + ": " + line);
                 if (id == commandId && line != null && line.length() > 0) {
+                    Log.d(TAG, "ID " + id + ": " + line);
                     output.add(line);
                 }
             }
@@ -77,7 +81,13 @@ class ShellExec {
 
         try {
             rootShell = RootTools.getShell(useRoot);
-            int exitCode = rootShell.add(cmd).exitCode();
+            int exitCode;
+            if (timeout > 0) {
+                exitCode = rootShell.add(cmd).exitCode(timeout);
+            }
+            else {
+                exitCode = rootShell.add(cmd).exitCode();
+            }
             if (exitCode == 0) {
                 errorCode = ErrorCode.NONE;
             }
@@ -118,11 +128,13 @@ class ShellExec {
         private ErrorCode.OutputListener listener;
         private ShellExec exec;
         private boolean useRoot;
+        private int timeout;
 
         public Worker(int api, ErrorCode.OutputListener listener) {
             this.api = api;
             this.listener = listener;
             this.useRoot = true;
+            this.timeout = 0;
         }
 
         public Worker(int api, boolean useRoot, String command, ErrorCode.OutputListener listener) {
@@ -130,12 +142,14 @@ class ShellExec {
             this.useRoot = useRoot;
             this.commands = new String[] { command };
             this.listener = listener;
+            this.timeout = 0;
         }
 
         public Worker(int api, boolean useRoot, CommandBuilder builder, ErrorCode.OutputListener listener) {
             this.api = api;
             this.useRoot = useRoot;
             this.commands = builder.commands.toArray(new String[builder.commands.size()]);
+            this.timeout = builder.timeout;
             this.listener = listener;
         }
 
@@ -145,6 +159,7 @@ class ShellExec {
             this.partition = partition;
             this.listener = listener;
             this.useRoot = true;
+            this.timeout = 0;
         }
 
         public Worker(int api, String packageName, String partition, String target, ErrorCode.OutputListener listener) {
@@ -154,6 +169,7 @@ class ShellExec {
             this.target = target;
             this.listener = listener;
             this.useRoot = true;
+            this.timeout = 0;
         }
 
         @Override
@@ -169,9 +185,8 @@ class ShellExec {
                     if (RootTools.isRootAvailable() && RootTools.isAccessGiven()) {
                         gotRoot = true;
                     }
-                } catch (Exception e1) {
-                    // TODO Auto-generated catch block
-                    e1.printStackTrace();
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
                 errorCode = gotRoot ? ErrorCode.NONE : ErrorCode.NO_ROOT_ACCESS;
             }
@@ -181,7 +196,7 @@ class ShellExec {
                 errorCode = available ? ErrorCode.NONE : ErrorCode.BUSYBOX;
             }
             else if (api == API_SEND) {
-                errorCode = exec.run(commands);
+                errorCode = exec.run(timeout, commands);
             }
             else if (api == API_EX_APPEXISTSONPARTITION) {
                 errorCode = AppManager.Internal.appExistsOnPartition(exec, packageName, partition);
