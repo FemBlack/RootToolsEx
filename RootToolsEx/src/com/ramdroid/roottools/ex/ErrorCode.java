@@ -51,4 +51,11 @@ public class ErrorCode {
     public interface OutputListener {
         void onResult(int errorCode, List<String> output);
     }
+
+    /**
+     * Interface to return the error code and output from ShellService calls.
+     */
+    public interface OutputListenerWithId {
+        void onResult(int id, int errorCode, List<String> output);
+    }
 }

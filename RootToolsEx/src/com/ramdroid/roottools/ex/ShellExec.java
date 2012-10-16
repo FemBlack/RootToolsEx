@@ -105,7 +105,51 @@ class ShellExec {
         return errorCode;
     }
 
-    public void destroy() {
+    public int callApi(int api, Params params, Integer... flags) {
+        int errorCode = ErrorCode.NONE;
+        if (api == API_GOTROOT) {
+            boolean gotRoot = false;
+            try {
+                if (RootTools.isRootAvailable() && RootTools.isAccessGiven()) {
+                    gotRoot = true;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            errorCode = gotRoot ? ErrorCode.NONE : ErrorCode.NO_ROOT_ACCESS;
+        }
+        else if (api == API_GOTBUSYBOX) {
+            String version = RootTools.getBusyBoxVersion();
+            boolean available = (version != null && version.length() > 0);
+            errorCode = available ? ErrorCode.NONE : ErrorCode.BUSYBOX;
+        }
+        else if (api == API_SEND) {
+            errorCode = run(params.timeout, params.commands);
+        }
+        else if (api == API_EX_APPEXISTSONPARTITION) {
+            errorCode = AppManager.Internal.appExistsOnPartition(this, params.packageName, params.partition);
+        }
+        else if (api == API_EX_APPFITSONPARTITION) {
+            errorCode = AppManager.Internal.appFitsOnPartition(params.packageName, params.partition);
+        }
+        else if (api == API_EX_MOVEAPPEX) {
+            if ((flags[0] & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
+                errorCode = AppManager.Internal.appFitsOnPartition(params.packageName, params.target);
+            }
+            if (errorCode == ErrorCode.NONE) {
+                errorCode = AppManager.Internal.moveAppEx(
+                        this,
+                        params.packageName,
+                        params.partition,
+                        params.target,
+                        flags[0]);
+            }
+        }
+        clear();
+        return errorCode;
+    }
+
+    public void clear() {
         try {
             if (rootShell != null) {
                 rootShell.close();
@@ -115,112 +159,88 @@ class ShellExec {
         }
     }
 
+    public static class Params {
+        private String[] commands;
+        private String packageName;
+        private String partition;
+        private String target;
+        private int timeout;
+
+        public Params() {
+        }
+
+        public Params(String command) {
+            this.commands = new String[] { command };
+        }
+
+        public Params(CommandBuilder builder) {
+            this.commands = builder.commands.toArray(new String[builder.commands.size()]);
+        }
+    }
+
     /**
      * Worker to execute all shell commands in a separate thread.
      */
     public static class Worker extends AsyncTask<Integer, Void, Integer> {
 
         private int api;
-        private String packageName;
-        private String partition;
-        private String target;
-        private String[] commands;
         private ErrorCode.OutputListener listener;
         private ShellExec exec;
         private boolean useRoot;
-        private int timeout;
+        private Params params = new Params();
 
         public Worker(int api, ErrorCode.OutputListener listener) {
             this.api = api;
             this.listener = listener;
             this.useRoot = true;
-            this.timeout = 0;
+            params.timeout = 0;
         }
 
         public Worker(int api, boolean useRoot, String command, ErrorCode.OutputListener listener) {
             this.api = api;
             this.useRoot = useRoot;
-            this.commands = new String[] { command };
             this.listener = listener;
-            this.timeout = 0;
+            params.commands = new String[] { command };
+            params.timeout = 0;
         }
 
         public Worker(int api, boolean useRoot, CommandBuilder builder, ErrorCode.OutputListener listener) {
             this.api = api;
             this.useRoot = useRoot;
-            this.commands = builder.commands.toArray(new String[builder.commands.size()]);
-            this.timeout = builder.timeout;
             this.listener = listener;
+            params.commands = builder.commands.toArray(new String[builder.commands.size()]);
+            params.timeout = builder.timeout;
         }
 
         public Worker(int api, String packageName, String partition, ErrorCode.OutputListener listener) {
             this.api = api;
-            this.packageName = packageName;
-            this.partition = partition;
-            this.listener = listener;
             this.useRoot = true;
-            this.timeout = 0;
+            this.listener = listener;
+            params.packageName = packageName;
+            params.partition = partition;
+            params.timeout = 0;
         }
 
         public Worker(int api, String packageName, String partition, String target, ErrorCode.OutputListener listener) {
             this.api = api;
-            this.packageName = packageName;
-            this.partition = partition;
-            this.target = target;
-            this.listener = listener;
             this.useRoot = true;
-            this.timeout = 0;
+            this.listener = listener;
+            params.packageName = packageName;
+            params.partition = partition;
+            params.target = target;
+            params.timeout = 0;
         }
 
         @Override
         protected Integer doInBackground(Integer... flags) {
-
-            int errorCode = ErrorCode.NONE;
-            exec = new ShellExec(useRoot);
-
-            // fire up some action
-            if (api == API_GOTROOT) {
-                boolean gotRoot = false;
-                try {
-                    if (RootTools.isRootAvailable() && RootTools.isAccessGiven()) {
-                        gotRoot = true;
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                errorCode = gotRoot ? ErrorCode.NONE : ErrorCode.NO_ROOT_ACCESS;
-            }
-            else if (api == API_GOTBUSYBOX) {
-                String version = RootTools.getBusyBoxVersion();
-                boolean available = (version != null && version.length() > 0);
-                errorCode = available ? ErrorCode.NONE : ErrorCode.BUSYBOX;
-            }
-            else if (api == API_SEND) {
-                errorCode = exec.run(timeout, commands);
-            }
-            else if (api == API_EX_APPEXISTSONPARTITION) {
-                errorCode = AppManager.Internal.appExistsOnPartition(exec, packageName, partition);
-            }
-            else if (api == API_EX_APPFITSONPARTITION) {
-                errorCode = AppManager.Internal.appFitsOnPartition(packageName, partition);
-            }
-            else if (api == API_EX_MOVEAPPEX) {
-                if ((flags[0] & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
-                    errorCode = AppManager.Internal.appFitsOnPartition(packageName, target);
-                }
-                if (errorCode == ErrorCode.NONE) {
-                    errorCode = AppManager.Internal.moveAppEx(exec, packageName, partition, target, flags[0]);
-                }
-            }
-
-            exec.destroy();
-
+            ShellExec exec = new ShellExec(useRoot);
+            int errorCode = exec.callApi(api, params, flags);
             return errorCode;
         }
 
         protected void onPostExecute(Integer errorCode) {
             if (listener != null) {
-                if  (exec.output == null) {
+                if (exec.output == null) {
                     exec.output = new ArrayList<String>();
                 }
                 listener.onResult(errorCode, exec.output);

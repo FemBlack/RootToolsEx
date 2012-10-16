@@ -57,16 +57,17 @@ public class ShellService extends Service {
      * @param useRoot True if you need a root shell.
      * @param listener Returns the command result.
      */
-    public static void start(Context context, boolean useRoot, final ErrorCode.OutputListener listener) {
+    public static void start(Context context, boolean useRoot, final ErrorCode.OutputListenerWithId listener) {
         Intent i = new Intent(context, ShellService.class);
         i.putExtra("useRoot", useRoot);
         i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
             @Override
             protected void onReceiveResult(int resultCode, Bundle resultData) {
                 if (resultCode == RESULT_ID_QUOTE) {
+                    int id = resultData.getInt("id");
                     int errorCode = resultData.getInt("errorCode");
                     List<String> output = resultData.getStringArrayList("output");
-                    listener.onResult(errorCode, output);
+                    listener.onResult(id, errorCode, output);
                 }
             }
         });
@@ -88,10 +89,12 @@ public class ShellService extends Service {
      * simple command at a time.
      *
      * @param context Context of the caller.
+     * @param id id of the command
      * @param cmd the command to execute in the shell.
      */
-    public static void send(Context context, String cmd) {
+    public static void send(Context context, int id, String cmd) {
         Bundle data = new Bundle();
+        data.putInt("id", id);
         data.putString("cmd", cmd);
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
         i.putExtras(data);
@@ -104,10 +107,12 @@ public class ShellService extends Service {
      * In the future this allows to use more options like e.g. timeouts.
      *
      * @param context Context of the caller.
+     * @param id id of the command
      * @param builder the {@link CommandBuilder} object
      */
-    public static void send(Context context, CommandBuilder builder) {
+    public static void send(Context context, int id, CommandBuilder builder) {
         Bundle data = new Bundle();
+        data.putInt("id", id);
         data.putParcelable("builder", builder);
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
         i.putExtras(data);
@@ -141,7 +146,7 @@ public class ShellService extends Service {
     public void onDestroy() {
         super.onDestroy();
         unregisterReceiver(receiver);
-        shellExec.destroy();
+        shellExec.clear();
     }
 
     private class CommandReceiver extends BroadcastReceiver {
@@ -149,6 +154,7 @@ public class ShellService extends Service {
         @Override
         public void onReceive(Context context, Intent intent) {
             final Bundle data = intent.getExtras();
+            final int id = data.getInt("id");
             final String cmd = data.getString("cmd");
             final CommandBuilder builder = data.getParcelable("builder");
 
@@ -167,6 +173,7 @@ public class ShellService extends Service {
 
                         if (resultReceiver != null) {
                             Bundle resultData = new Bundle();
+                            resultData.putInt("id", id);
                             resultData.putInt("errorCode", errorCode);
                             resultData.putStringArrayList("output", shellExec.output);
                             resultReceiver.send(RESULT_ID_QUOTE, resultData);

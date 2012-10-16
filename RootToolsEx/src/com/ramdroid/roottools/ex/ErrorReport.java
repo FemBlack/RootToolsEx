@@ -322,7 +322,7 @@ public class ErrorReport {
                     addLogLines(outputFile, true, exec.output);
                 }
             }
-            exec.destroy();
+            exec.clear();
             return errorCode;
         }
 
