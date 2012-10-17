@@ -233,7 +233,7 @@ class ShellExec {
 
         @Override
         protected Integer doInBackground(Integer... flags) {
-            ShellExec exec = new ShellExec(useRoot);
+            exec = new ShellExec(useRoot);
             int errorCode = exec.callApi(api, params, flags);
             return errorCode;
         }
