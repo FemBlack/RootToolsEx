@@ -202,7 +202,7 @@ public class AppManager {
                 File[] files = root.listFiles();
                 if (files != null) {
                     for (File f : files) {
-                        if (f.getName().contains(packageName)) {
+                        if (equalsPackage(f.getName(), packageName)) {
                             Log.d(TAG, "Found " + f.getPath());
                             result.errorCode = ErrorCode.NONE;
                             result.filename = f.getPath();
@@ -217,13 +217,30 @@ public class AppManager {
             return result;
         }
 
+        private static boolean equalsPackage(String line, String packageName) {
+            boolean found = false;
+            if (line.endsWith(".apk")) {
+                int sep = line.lastIndexOf("-");
+                if (sep <= 0) {
+                    sep = line.lastIndexOf("~");
+                }
+                if (sep > 0) {
+                    String parsedPackageName = line.substring(0, sep);
+                    if (parsedPackageName.equals(packageName)) {
+                        found = true;
+                    }
+                }
+            }
+            return found;
+        }
+
         private static ResultSet getPackageFilenameWithRoot(ShellExec exec, final String packageName, String partition) {
             ResultSet result = new ResultSet();
             result.errorCode = exec.run("busybox ls /" + partition + "/app | grep " + packageName);
             if (result.errorCode == ErrorCode.NONE) {
                 for (String line : exec.output) {
                     Log.d(TAG, line);
-                    if (line.contains(packageName)) {
+                    if (equalsPackage(line, packageName)) {
                         result.errorCode = ErrorCode.NONE;
                         result.filename = "/" + partition + "/app/" + line;
                         break;

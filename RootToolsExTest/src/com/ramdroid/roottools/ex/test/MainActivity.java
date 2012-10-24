@@ -23,4 +23,8 @@ public class MainActivity extends Activity {
     public void onAsyncShell(View v) {
         startActivity(new Intent(this, AsyncShellActivity.class));
     }
+
+    public void onAppManager(View v) {
+        startActivity(new Intent(this, AppManagerActivity.class));
+    }
 }
