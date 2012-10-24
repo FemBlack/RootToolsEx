@@ -178,10 +178,25 @@ public class AppManager {
      */
     static class Internal {
 
-        private static final String TAG = "AppMover";
+        private static final String TAG = "AppManager";
+
+        private static class ResultSet {
+            int errorCode;
+            String filename;
+
+            public ResultSet() {
+                errorCode = ErrorCode.NOT_EXISTING;
+                filename = null;
+            }
+        }
 
         public static int appExistsOnPartition(ShellExec exec, String packageName, String partition) {
-            int errorCode = ErrorCode.NOT_EXISTING;
+            ResultSet result = getPackageFilename(exec, packageName, partition);
+            return result.errorCode;
+        }
+
+        private static ResultSet getPackageFilename(ShellExec exec, String packageName, String partition) {
+            ResultSet result = new ResultSet();
             if (partition.equals(PARTITION_SYSTEM)) {
                 File root = new File("/" + partition + "/app/");
                 File[] files = root.listFiles();
@@ -189,69 +204,70 @@ public class AppManager {
                     for (File f : files) {
                         if (f.getName().contains(packageName)) {
                             Log.d(TAG, "Found " + f.getPath());
-                            errorCode = ErrorCode.NONE;
+                            result.errorCode = ErrorCode.NONE;
+                            result.filename = f.getPath();
                             break;
                         }
                     }
                 }
             }
             else {
-                return Internal.appExistsOnPartitionWithRoot(exec, packageName, partition);
+                result = Internal.getPackageFilenameWithRoot(exec, packageName, partition);
             }
-            return errorCode;
+            return result;
         }
 
-        public static int appExistsOnPartitionWithRoot(ShellExec exec, final String packageName, String partition) {
-            int errorCode = exec.run("busybox ls /" + partition + "/app | grep " + packageName);
-            if (errorCode == ErrorCode.NONE) {
+        private static ResultSet getPackageFilenameWithRoot(ShellExec exec, final String packageName, String partition) {
+            ResultSet result = new ResultSet();
+            result.errorCode = exec.run("busybox ls /" + partition + "/app | grep " + packageName);
+            if (result.errorCode == ErrorCode.NONE) {
                 for (String line : exec.output) {
                     Log.d(TAG, line);
                     if (line.contains(packageName)) {
-                        errorCode = ErrorCode.NONE;
+                        result.errorCode = ErrorCode.NONE;
+                        result.filename = "/" + partition + "/app/" + line;
+                        break;
                     }
                     else if (line.contains("fail")) {
-                        errorCode = ErrorCode.BUSYBOX;
+                        result.errorCode = ErrorCode.BUSYBOX;
                     }
                 }
             }
-            else if (errorCode == ErrorCode.COMMAND_FAILED) {
+            else if (result.errorCode == ErrorCode.COMMAND_FAILED) {
                 // not found --> this is not an error
-                errorCode = ErrorCode.NOT_EXISTING;
+                result.errorCode = ErrorCode.NOT_EXISTING;
             }
             else {
-                Log.d(TAG, "Error code: " + errorCode);
+                Log.d(TAG, "Error code: " + result.errorCode);
                 for (String line : exec.output) {
                     Log.d(TAG, line);
                 }
             }
 
-            return errorCode;
+            return result;
         }
 
-        public static int appFitsOnPartition(String packageName, String partition) {
-            int errorCode = ErrorCode.INSUFFICIENT_SPACE;
+        public static int appFitsOnPartition(ShellExec exec, String packageName, String partition) {
             long freeDiskSpace = RootTools.getSpace("/" + partition);
-            long apkSpace = 0;
+            Log.d(TAG, "Available disk space on " + partition + ": " + freeDiskSpace + " KB");
 
             String appPartition = PARTITION_DATA;
             if (partition.equals(PARTITION_DATA)) {
                 appPartition = PARTITION_SYSTEM;
             }
 
-            File apk1 = new File("/" + appPartition + "/app/" + packageName + "-1.apk");
-            File apk2 = new File("/" + appPartition + "/app/" + packageName + "-2.apk");
-            apkSpace = apk1.length() / 1024;
-            if (apkSpace < 1) {
-                apkSpace = apk2.length() / 1024;
-            }
+            ResultSet result = getPackageFilename(exec, packageName, appPartition);
+            if (result.errorCode == ErrorCode.NONE) {
+                long apkSpace = new File(result.filename).length() / 1024;
+                Log.d(TAG, "Found " + result.filename + " --> required disk space: " + apkSpace + " KB");
 
-            Log.d(TAG, "Available disk space on " + partition + ": " + freeDiskSpace);
-            Log.d(TAG, "Required disk space for APK: " + apkSpace);
-
-            if ((apkSpace > 0) && (freeDiskSpace > apkSpace)) {
-                errorCode = ErrorCode.NONE;
+                if ((apkSpace < 1) || (freeDiskSpace < apkSpace)) {
+                    result.errorCode = ErrorCode.INSUFFICIENT_SPACE;
+                }
             }
-            return errorCode;
+            else result.errorCode = ErrorCode.NOT_EXISTING;
+
+            return result.errorCode;
         }
 
         public static int moveAppEx(ShellExec exec, String packageName, String sourcePartition, String targetPartition, int flags) {
