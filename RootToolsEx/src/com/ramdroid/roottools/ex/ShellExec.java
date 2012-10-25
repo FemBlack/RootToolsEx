@@ -133,17 +133,12 @@ class ShellExec {
             errorCode = AppManager.Internal.appFitsOnPartition(this, params.packageName, params.partition);
         }
         else if (api == API_EX_MOVEAPPEX) {
-            if ((flags[0] & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
-                errorCode = AppManager.Internal.appFitsOnPartition(this, params.packageName, params.target);
-            }
-            if (errorCode == ErrorCode.NONE) {
-                errorCode = AppManager.Internal.moveAppEx(
-                        this,
-                        params.packageName,
-                        params.partition,
-                        params.target,
-                        flags[0]);
-            }
+            errorCode = AppManager.Internal.moveAppEx(
+                    this,
+                    params.packageName,
+                    params.partition,
+                    params.target,
+                    flags[0]);
         }
         clear();
         return errorCode;

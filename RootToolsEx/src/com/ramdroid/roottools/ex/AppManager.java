@@ -238,6 +238,7 @@ public class AppManager {
             ResultSet result = new ResultSet();
             result.errorCode = exec.run("busybox ls /" + partition + "/app | grep " + packageName);
             if (result.errorCode == ErrorCode.NONE) {
+                result.errorCode = ErrorCode.NOT_EXISTING;
                 for (String line : exec.output) {
                     Log.d(TAG, line);
                     if (equalsPackage(line, packageName)) {
@@ -265,6 +266,11 @@ public class AppManager {
         }
 
         public static int appFitsOnPartition(ShellExec exec, String packageName, String partition) {
+            ResultSet result = packageFitsOnPartition(exec, packageName, partition);
+            return result.errorCode;
+        }
+
+        private static ResultSet packageFitsOnPartition(ShellExec exec, String packageName, String partition) {
             long freeDiskSpace = RootTools.getSpace("/" + partition);
             Log.d(TAG, "Available disk space on " + partition + ": " + freeDiskSpace + " KB");
 
@@ -284,46 +290,59 @@ public class AppManager {
             }
             else result.errorCode = ErrorCode.NOT_EXISTING;
 
-            return result.errorCode;
+            return result;
         }
 
         public static int moveAppEx(ShellExec exec, String packageName, String sourcePartition, String targetPartition, int flags) {
             int errorCode = ErrorCode.NONE;
-            boolean needRemountSystem = (sourcePartition.equals(PARTITION_SYSTEM) || targetPartition.equals(PARTITION_SYSTEM));
-            if (needRemountSystem) {
-                if (!RootTools.remount("/system", "RW")) {
-                    errorCode = ErrorCode.REMOUNT_SYSTEM;
-                }
+
+            ResultSet result = packageFitsOnPartition(exec, packageName, targetPartition);
+            if ((flags & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
+                errorCode = result.errorCode;
             }
 
+            String sourcePath = result.filename;
+            String targetPath = sourcePath.replace(
+                    "/" + sourcePartition + "/app/",
+                    "/" + targetPartition + "/app/");
+
             if (errorCode == ErrorCode.NONE) {
-                // install or remove system app
-                String shellCmd = "busybox mv /" + sourcePartition + "/app/" + packageName + "*.apk /" + targetPartition + "/app/";
-                if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
-                    errorCode = appExistsOnPartition(exec, packageName, targetPartition);
-                    if (errorCode == ErrorCode.NONE) {
-                        // App is already existing in target partition, so just remove it from source partition
-                        shellCmd = "busybox rm /" + sourcePartition + "/app/" + packageName + "*.apk";
-                    }
-                    else if (errorCode == ErrorCode.NOT_EXISTING) {
-                        errorCode = ErrorCode.NONE;
-                    }
-                }
-                Log.d(TAG, shellCmd);
-
-                if (errorCode == ErrorCode.NONE) {
-                    // move APK to system partition or vice versa
-                    errorCode = exec.run(shellCmd);
-                }
-
+                boolean needRemountSystem = (sourcePartition.equals(PARTITION_SYSTEM) || targetPartition.equals(PARTITION_SYSTEM));
                 if (needRemountSystem) {
-                    // mount R/O
-                    RootTools.remount("/system", "RO");
+                    if (!RootTools.remount("/system", "RW")) {
+                        errorCode = ErrorCode.REMOUNT_SYSTEM;
+                    }
                 }
 
                 if (errorCode == ErrorCode.NONE) {
-                    if ((flags & FLAG_REBOOT) > 0) {
-                        exec.run("reboot");
+                    // install or remove system app
+                    String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
+                    if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
+                        errorCode = appExistsOnPartition(exec, packageName, targetPartition);
+                        if (errorCode == ErrorCode.NONE) {
+                            // App is already existing in target partition, so just remove it from source partition
+                            shellCmd = "busybox rm " + sourcePath;
+                        }
+                        else if (errorCode == ErrorCode.NOT_EXISTING) {
+                            errorCode = ErrorCode.NONE;
+                        }
+                    }
+                    Log.d(TAG, shellCmd);
+
+                    if (errorCode == ErrorCode.NONE) {
+                        // move APK to system partition or vice versa
+                        errorCode = exec.run(shellCmd);
+                    }
+
+                    if (needRemountSystem) {
+                        // mount R/O
+                        RootTools.remount("/system", "RO");
+                    }
+
+                    if (errorCode == ErrorCode.NONE) {
+                        if ((flags & FLAG_REBOOT) > 0) {
+                            exec.run("reboot");
+                        }
                     }
                 }
             }
