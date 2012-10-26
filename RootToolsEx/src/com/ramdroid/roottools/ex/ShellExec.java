@@ -25,6 +25,7 @@ import com.stericson.RootTools.execution.Shell;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 
@@ -127,15 +128,15 @@ class ShellExec {
             errorCode = run(params.timeout, params.commands);
         }
         else if (api == API_EX_APPEXISTSONPARTITION) {
-            errorCode = AppManager.Internal.appExistsOnPartition(this, params.packageName, params.partition);
+            errorCode = AppManager.Internal.appExistsOnPartition(this, params.packages.get(0), params.partition);
         }
         else if (api == API_EX_APPFITSONPARTITION) {
-            errorCode = AppManager.Internal.appFitsOnPartition(this, params.packageName, params.partition);
+            errorCode = AppManager.Internal.appFitsOnPartition(this, params.packages.get(0), params.partition);
         }
         else if (api == API_EX_MOVEAPPEX) {
             errorCode = AppManager.Internal.moveAppEx(
                     this,
-                    params.packageName,
+                    params.packages,
                     params.partition,
                     params.target,
                     flags[0]);
@@ -156,7 +157,7 @@ class ShellExec {
 
     public static class Params {
         private String[] commands;
-        private String packageName;
+        private List<String> packages = new ArrayList<String>();
         private String partition;
         private String target;
         private int timeout;
@@ -211,7 +212,7 @@ class ShellExec {
             this.api = api;
             this.useRoot = true;
             this.listener = listener;
-            params.packageName = packageName;
+            params.packages.add(packageName);
             params.partition = partition;
             params.timeout = 0;
         }
@@ -220,7 +221,17 @@ class ShellExec {
             this.api = api;
             this.useRoot = true;
             this.listener = listener;
-            params.packageName = packageName;
+            params.packages.add(packageName);
+            params.partition = partition;
+            params.target = target;
+            params.timeout = 0;
+        }
+
+        public Worker(int api, List<String> packages, String partition, String target, ErrorCode.OutputListener listener) {
+            this.api = api;
+            this.useRoot = true;
+            this.listener = listener;
+            params.packages.addAll(packages);
             params.partition = partition;
             params.target = target;
             params.timeout = 0;

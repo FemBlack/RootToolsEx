@@ -21,6 +21,8 @@ import com.stericson.RootTools.RootTools;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * APIs to move an app from one partition to another.
@@ -122,7 +124,7 @@ public class AppManager {
      * @param packageName Package name of the App e.g. com.example.myapp
      * @param listener returns the error code when job is finished
      */
-    public static void removeSystemApp(String packageName, ErrorCode.OutputListener listener) {
+    public static void uninstallSystemApp(String packageName, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
@@ -139,7 +141,7 @@ public class AppManager {
      * @param addFlags use additional flags e.g. FLAG_REBOOT
      * @param listener returns the error code when job is finished
      */
-    public static void removeSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
+    public static void uninstallSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
@@ -167,6 +169,30 @@ public class AppManager {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
+                partition,
+                target,
+                listener).execute(flags);
+    }
+
+    /**
+     * Moves a couple of packages from one partition to another.
+     *
+     * The exact behavior can be customized using additional flags:
+     *
+     * FLAG_OVERWRITE   --> Overwrite the target if already existing
+     * FLAG_CHECKSPACE  --> Check available diskspace before moving
+     * FLAG_REBOOT      --> Immediately reboot device when done
+     *
+     * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
+     * @param partition Source partition
+     * @param target Target partition
+     * @param flags Additional flags
+     * @param listener listener returns the error code when job is finished
+     */
+    public static void moveAppEx(List<String> packages, String partition, String target, int flags, ErrorCode.OutputListener listener) {
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
+                packages,
                 partition,
                 target,
                 listener).execute(flags);
@@ -293,20 +319,25 @@ public class AppManager {
             return result;
         }
 
-        public static int moveAppEx(ShellExec exec, String packageName, String sourcePartition, String targetPartition, int flags) {
+        public static int moveAppEx(ShellExec exec, List<String> packages, String sourcePartition, String targetPartition, int flags) {
             int errorCode = ErrorCode.NONE;
 
-            ResultSet result = packageFitsOnPartition(exec, packageName, targetPartition);
-            if ((flags & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
-                errorCode = result.errorCode;
+            // check disk space
+            HashMap<String, String> table = new HashMap<String, String>();
+            for (String packageName : packages) {
+                ResultSet result = packageFitsOnPartition(exec, packageName, targetPartition);
+                if ((flags & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
+                    errorCode = result.errorCode;
+                }
+                table.put(packageName, result.filename);
+                if (errorCode != ErrorCode.NONE) {
+                    break;
+                }
             }
 
-            String sourcePath = result.filename;
-            String targetPath = sourcePath.replace(
-                    "/" + sourcePartition + "/app/",
-                    "/" + targetPartition + "/app/");
-
             if (errorCode == ErrorCode.NONE) {
+
+                // mount system partition if needed
                 boolean needRemountSystem = (sourcePartition.equals(PARTITION_SYSTEM) || targetPartition.equals(PARTITION_SYSTEM));
                 if (needRemountSystem) {
                     if (!RootTools.remount("/system", "RW")) {
@@ -315,23 +346,33 @@ public class AppManager {
                 }
 
                 if (errorCode == ErrorCode.NONE) {
-                    // install or remove system app
-                    String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
-                    if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
-                        errorCode = appExistsOnPartition(exec, packageName, targetPartition);
-                        if (errorCode == ErrorCode.NONE) {
-                            // App is already existing in target partition, so just remove it from source partition
-                            shellCmd = "busybox rm " + sourcePath;
-                        }
-                        else if (errorCode == ErrorCode.NOT_EXISTING) {
-                            errorCode = ErrorCode.NONE;
-                        }
-                    }
-                    Log.d(TAG, shellCmd);
 
-                    if (errorCode == ErrorCode.NONE) {
-                        // move APK to system partition or vice versa
-                        errorCode = exec.run(shellCmd);
+                    for (String packageName : packages) {
+                        String sourcePath = table.get(packageName);
+                        String targetPath = sourcePath.replace(
+                                "/" + sourcePartition + "/app/",
+                                "/" + targetPartition + "/app/");
+
+                        // prepare move command
+                        String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
+                        if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
+                            errorCode = appExistsOnPartition(exec, packageName, targetPartition);
+                            if (errorCode == ErrorCode.NONE) {
+                                // App is already existing in target partition, so just remove it from source partition
+                                shellCmd = "busybox rm " + sourcePath;
+                            }
+                            else if (errorCode == ErrorCode.NOT_EXISTING) {
+                                errorCode = ErrorCode.NONE;
+                            }
+                        }
+                        if (errorCode == ErrorCode.NONE) {
+                            // execute in shell
+                            errorCode = exec.run(shellCmd);
+                        }
+                        if (errorCode != ErrorCode.NONE) {
+                            // immediately abort on any errors
+                            break;
+                        }
                     }
 
                     if (needRemountSystem) {
