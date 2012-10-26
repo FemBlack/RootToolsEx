@@ -37,6 +37,7 @@ public class ErrorCode {
     public static final int NO_EXTERNAL_STORAGE     = 11;
     public static final int TIMEOUT                 = 12;
     public static final int COMMAND_FAILED          = 13;
+    public static final int ALREADY_EXISTING        = 14;
 
     /**
      * Interface to receive the error code result.

@@ -16,6 +16,10 @@ package com.ramdroid.roottools.ex;
  limitations under the License.
  */
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Environment;
+import android.provider.ContactsContract;
 import android.util.Log;
 import com.stericson.RootTools.RootTools;
 
@@ -34,6 +38,7 @@ public class AppManager {
 
     public static final String PARTITION_DATA   = "data";
     public static final String PARTITION_SYSTEM = "system";
+    public static final String PARTITION_TRASH  = ".roottools.trash";
 
     public static final int FLAG_OVERWRITE      = 1;
     public static final int FLAG_CHECKSPACE     = 2;
@@ -211,8 +216,13 @@ public class AppManager {
             String filename;
 
             public ResultSet() {
-                errorCode = ErrorCode.NOT_EXISTING;
-                filename = null;
+                this.errorCode = ErrorCode.NOT_EXISTING;
+                this.filename = null;
+            }
+
+            public ResultSet(int errorCode) {
+                this.errorCode = errorCode;
+                this.filename = null;
             }
         }
 
@@ -223,13 +233,12 @@ public class AppManager {
 
         private static ResultSet getPackageFilename(ShellExec exec, String packageName, String partition) {
             ResultSet result = new ResultSet();
-            if (partition.equals(PARTITION_SYSTEM)) {
-                File root = new File("/" + partition + "/app/");
+            if (!partition.equals(PARTITION_DATA)) {
+                File root = new File(getPartitionPath(partition) + "/app/");
                 File[] files = root.listFiles();
                 if (files != null) {
                     for (File f : files) {
                         if (equalsPackage(f.getName(), packageName)) {
-                            Log.d(TAG, "Found " + f.getPath());
                             result.errorCode = ErrorCode.NONE;
                             result.filename = f.getPath();
                             break;
@@ -243,33 +252,16 @@ public class AppManager {
             return result;
         }
 
-        private static boolean equalsPackage(String line, String packageName) {
-            boolean found = false;
-            if (line.endsWith(".apk")) {
-                int sep = line.lastIndexOf("-");
-                if (sep <= 0) {
-                    sep = line.lastIndexOf("~");
-                }
-                if (sep > 0) {
-                    String parsedPackageName = line.substring(0, sep);
-                    if (parsedPackageName.equals(packageName)) {
-                        found = true;
-                    }
-                }
-            }
-            return found;
-        }
-
         private static ResultSet getPackageFilenameWithRoot(ShellExec exec, final String packageName, String partition) {
             ResultSet result = new ResultSet();
-            result.errorCode = exec.run("busybox ls /" + partition + "/app | grep " + packageName);
+            result.errorCode = exec.run("busybox ls " + getPartitionPath(partition) + "/app | grep " + packageName);
             if (result.errorCode == ErrorCode.NONE) {
                 result.errorCode = ErrorCode.NOT_EXISTING;
                 for (String line : exec.output) {
                     Log.d(TAG, line);
                     if (equalsPackage(line, packageName)) {
                         result.errorCode = ErrorCode.NONE;
-                        result.filename = "/" + partition + "/app/" + line;
+                        result.filename = getPartitionPath(partition) + "/app/" + line;
                         break;
                     }
                     else if (line.contains("fail")) {
@@ -291,32 +283,77 @@ public class AppManager {
             return result;
         }
 
-        public static int appFitsOnPartition(ShellExec exec, String packageName, String partition) {
-            ResultSet result = packageFitsOnPartition(exec, packageName, partition);
-            return result.errorCode;
+        private static boolean equalsPackage(String line, String packageName) {
+            boolean found = false;
+            if (line.endsWith(".apk")) {
+                int sep = line.lastIndexOf("-");
+                if (sep <= 0) {
+                    sep = line.lastIndexOf("~");
+                }
+                if (sep > 0) {
+                    String parsedPackageName = line.substring(0, sep);
+                    if (parsedPackageName.equals(packageName)) {
+                        found = true;
+                    }
+                }
+            }
+            return found;
         }
 
-        private static ResultSet packageFitsOnPartition(ShellExec exec, String packageName, String partition) {
-            long freeDiskSpace = RootTools.getSpace("/" + partition);
-            Log.d(TAG, "Available disk space on " + partition + ": " + freeDiskSpace + " KB");
-
-            String appPartition = PARTITION_DATA;
-            if (partition.equals(PARTITION_DATA)) {
-                appPartition = PARTITION_SYSTEM;
+        public static int appFitsOnPartition(ShellExec exec, String packageName, String partition) {
+            String source = null;
+            String[] partitions = { PARTITION_DATA, PARTITION_SYSTEM, PARTITION_TRASH };
+            for (String p : partitions) {
+                if (!partition.equals(p)) {
+                    if (appExistsOnPartition(exec, packageName, p) == ErrorCode.NONE) {
+                        source = p;
+                        break;
+                    }
+                }
             }
 
-            ResultSet result = getPackageFilename(exec, packageName, appPartition);
+            if (source != null) {
+                ResultSet result = packageFitsOnPartition(exec, packageName, source, partition);
+                return result.errorCode;
+            }
+            else return ErrorCode.ALREADY_EXISTING;
+        }
+
+        private static ResultSet packageFitsOnPartition(ShellExec exec, String packageName, String source, String target) {
+
+            // get required disk space for APK
+            long apkSpace = 0;
+            ResultSet result = getPackageFilename(exec, packageName, source);
             if (result.errorCode == ErrorCode.NONE) {
-                long apkSpace = new File(result.filename).length() / 1024;
-                Log.d(TAG, "Found " + result.filename + " --> required disk space: " + apkSpace + " KB");
+                apkSpace = new File(result.filename).length();
+                Log.d(TAG, "Found " + result.filename + " --> required disk space: " + apkSpace + " bytes");
+            }
+            else result.errorCode = ErrorCode.NOT_EXISTING;
+
+            if (target.equals(PARTITION_TRASH)) {
+                // special handling for SD card
+                if (!RootTools.hasEnoughSpaceOnSdCard(apkSpace)) {
+                    result.errorCode = ErrorCode.INSUFFICIENT_SPACE;
+                }
+            }
+            else {
+                // check if APK fits on target partition
+                long freeDiskSpace = RootTools.getSpace(getPartitionPath(target)) * 1024;
+                Log.d(TAG, "Available disk space on " + target + ": " + freeDiskSpace + " bytes");
 
                 if ((apkSpace < 1) || (freeDiskSpace < apkSpace)) {
                     result.errorCode = ErrorCode.INSUFFICIENT_SPACE;
                 }
             }
-            else result.errorCode = ErrorCode.NOT_EXISTING;
-
             return result;
+        }
+
+        private static String getPartitionPath(String partition) {
+            String path = "/" + partition;
+            if (partition.equals(PARTITION_TRASH)) {
+                path = Environment.getExternalStorageDirectory().getPath() + "/" + PARTITION_TRASH;
+            }
+            return path;
         }
 
         public static int moveAppEx(ShellExec exec, List<String> packages, String sourcePartition, String targetPartition, int flags) {
@@ -325,13 +362,23 @@ public class AppManager {
             // check disk space
             HashMap<String, String> table = new HashMap<String, String>();
             for (String packageName : packages) {
-                ResultSet result = packageFitsOnPartition(exec, packageName, targetPartition);
+                ResultSet result = packageFitsOnPartition(exec, packageName, sourcePartition, targetPartition);
                 if ((flags & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
                     errorCode = result.errorCode;
                 }
                 table.put(packageName, result.filename);
                 if (errorCode != ErrorCode.NONE) {
                     break;
+                }
+            }
+
+            // create trash if not existing
+            if (targetPartition.equals(PARTITION_TRASH)) {
+                File trash = new File(getPartitionPath(targetPartition) + "/app");
+                if (!trash.isDirectory()) {
+                    if (!trash.mkdirs()) {
+                        errorCode = ErrorCode.NO_EXTERNAL_STORAGE;
+                    }
                 }
             }
 
@@ -350,8 +397,8 @@ public class AppManager {
                     for (String packageName : packages) {
                         String sourcePath = table.get(packageName);
                         String targetPath = sourcePath.replace(
-                                "/" + sourcePartition + "/app/",
-                                "/" + targetPartition + "/app/");
+                                getPartitionPath(sourcePartition) + "/app/",
+                                getPartitionPath(targetPartition) + "/app/");
 
                         // prepare move command
                         String shellCmd = "busybox mv " + sourcePath + " " + targetPath;

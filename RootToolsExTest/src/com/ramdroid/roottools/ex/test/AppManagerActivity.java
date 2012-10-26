@@ -61,4 +61,48 @@ public class AppManagerActivity extends Activity {
             }
         });
     }
+
+    public void appExistsInTrash(View v) {
+        textResult.setText("");
+
+        AppManager.appExistsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_TRASH, new OutputListener() {
+            @Override
+            public void onResult(int errorCode, List<String> output) {
+                textResult.setText("Result error code: " + errorCode);
+            }
+        });
+    }
+
+    public void appFitsOnData(View v) {
+        textResult.setText("");
+
+        AppManager.appFitsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_DATA, new OutputListener() {
+            @Override
+            public void onResult(int errorCode, List<String> output) {
+                textResult.setText("Result error code: " + errorCode);
+            }
+        });
+    }
+
+    public void appFitsOnSystem(View v) {
+        textResult.setText("");
+
+        AppManager.appFitsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_SYSTEM, new OutputListener() {
+            @Override
+            public void onResult(int errorCode, List<String> output) {
+                textResult.setText("Result error code: " + errorCode);
+            }
+        });
+    }
+
+    public void appFitsInTrash(View v) {
+        textResult.setText("");
+
+        AppManager.appFitsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_TRASH, new OutputListener() {
+            @Override
+            public void onResult(int errorCode, List<String> output) {
+                textResult.setText("Result error code: " + errorCode);
+            }
+        });
+    }
 }

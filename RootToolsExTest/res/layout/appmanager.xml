@@ -20,6 +20,30 @@
             android:text="@string/app_exists_on_system"
             android:onClick="appExistsOnSystem" />
 
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_exists_in_trash"
+            android:onClick="appExistsInTrash" />
+
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_fits_on_data"
+            android:onClick="appFitsOnData" />
+
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_fits_on_system"
+            android:onClick="appFitsOnSystem" />
+
+    <Button
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_fits_in_trash"
+            android:onClick="appFitsInTrash" />
+
     <TextView
             android:id="@+id/result"
             android:textSize="17dp"

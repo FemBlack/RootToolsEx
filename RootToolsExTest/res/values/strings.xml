@@ -11,4 +11,8 @@
     <string name="busybox_FAILED">Busybox FAILED</string>
     <string name="app_exists_on_data">App exists on DATA partition?</string>
     <string name="app_exists_on_system">App exists on SYSTEM partition?</string>
+    <string name="app_exists_in_trash">App exists in TRASH?</string>
+    <string name="app_fits_on_data">App fits on DATA partition?</string>
+    <string name="app_fits_on_system">App fits on SYSTEM partition?</string>
+    <string name="app_fits_in_trash">App fits in TRASH?</string>
 </resources>
