@@ -16,11 +16,9 @@ package com.ramdroid.roottools.ex;
  limitations under the License.
  */
 
-import android.Manifest;
-import android.content.pm.PackageManager;
 import android.os.Environment;
-import android.provider.ContactsContract;
 import android.util.Log;
+
 import com.stericson.RootTools.RootTools;
 
 import java.io.File;
@@ -192,7 +190,7 @@ public class AppManager {
      * @param partition Source partition
      * @param target Target partition
      * @param flags Additional flags
-     * @param listener listener returns the error code when job is finished
+     * @param listener returns the error code when job is finished
      */
     public static void moveAppEx(List<String> packages, String partition, String target, int flags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
@@ -201,6 +199,25 @@ public class AppManager {
                 partition,
                 target,
                 listener).execute(flags);
+    }
+
+    /**
+     * Returns the list of all packages in the trash.
+     *
+     * @param listener returns the list of packages
+     */
+    public static void getPackagesFromTrash(ErrorCode.OutputListener listener) {
+        Internal.getPackagesFromTrash(listener);
+    }
+
+    /**
+     * Remove packages from trash permanently.
+     *
+     * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
+     * @param listener returns the error code when job is finished
+     */
+    public static void wipePackageFromTrash(List<String> packages, ErrorCode.OutputListener listener) {
+        Internal.wipePackagesFromTrash(packages, listener);
     }
 
     /**
@@ -287,9 +304,6 @@ public class AppManager {
             boolean found = false;
             if (line.endsWith(".apk")) {
                 int sep = line.lastIndexOf("-");
-                if (sep <= 0) {
-                    sep = line.lastIndexOf("~");
-                }
                 if (sep > 0) {
                     String parsedPackageName = line.substring(0, sep);
                     if (parsedPackageName.equals(packageName)) {
@@ -435,6 +449,41 @@ public class AppManager {
                 }
             }
             return errorCode;
+        }
+
+        private static void getPackagesFromTrash(ErrorCode.OutputListener listener) {
+            ArrayList<String> output = new ArrayList<String>();
+            File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
+            File[] files = root.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    output.add(f.getName());
+                }
+            }
+            listener.onResult(ErrorCode.NONE, output);
+        }
+
+        private static void wipePackagesFromTrash(List<String> packages, ErrorCode.OutputListener listener) {
+            int errorCode = ErrorCode.NONE;
+            ArrayList<String> output = new ArrayList<String>();
+            File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
+            File[] files = root.listFiles();
+            if (files != null) {
+                for (String packageName : packages) {
+                    boolean found = false;
+                    for (File f : files) {
+                        if (equalsPackage(f.getName(), packageName)) {
+                            f.delete();
+                            found = true;
+                        }
+                    }
+                    if (!found) {
+                        output.add("Package not found: " + packageName);
+                        errorCode = ErrorCode.NOT_EXISTING;
+                    }
+                }
+            }
+            listener.onResult(errorCode, output);
         }
     }
 }

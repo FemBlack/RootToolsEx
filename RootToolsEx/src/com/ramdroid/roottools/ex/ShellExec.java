@@ -227,6 +227,14 @@ class ShellExec {
             params.timeout = 0;
         }
 
+        public Worker(int api, List<String> packages, ErrorCode.OutputListener listener) {
+            this.api = api;
+            this.useRoot = true;
+            this.listener = listener;
+            params.packages.addAll(packages);
+            params.timeout = 0;
+        }
+
         public Worker(int api, List<String> packages, String partition, String target, ErrorCode.OutputListener listener) {
             this.api = api;
             this.useRoot = true;
