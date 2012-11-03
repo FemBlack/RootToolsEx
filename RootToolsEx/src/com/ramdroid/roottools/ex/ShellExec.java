@@ -46,8 +46,9 @@ class ShellExec {
     public static final int API_EX_APPEXISTSONPARTITION     = 101;
     public static final int API_EX_APPFITSONPARTITION       = 102;
     public static final int API_EX_MOVEAPPEX                = 103;
+    public static final int API_EX_WIPEAPP                  = 104;
 
-    public ArrayList<String> output;
+    public ArrayList<String> output = new ArrayList<String>();;
 
     private Shell rootShell;
     private boolean useRoot;
@@ -67,7 +68,7 @@ class ShellExec {
     public int run(int timeout, String... command) {
         int errorCode = ErrorCode.COMMAND_FAILED;
         commandId += 1;
-        output = new ArrayList<String>();
+        output.clear();
         Log.d(TAG, "Cmd " + commandId + ": " + command.toString());
         Command cmd = new Command(commandId, command) {
 
@@ -140,6 +141,9 @@ class ShellExec {
                     params.partition,
                     params.target,
                     flags[0]);
+        }
+        else if (api == API_EX_WIPEAPP) {
+            errorCode = AppManager.Internal.wipePackages(this, params.packages, params.partition, flags[0]);
         }
         clear();
         return errorCode;
@@ -227,11 +231,12 @@ class ShellExec {
             params.timeout = 0;
         }
 
-        public Worker(int api, List<String> packages, ErrorCode.OutputListener listener) {
+        public Worker(int api, List<String> packages, String partition, ErrorCode.OutputListener listener) {
             this.api = api;
             this.useRoot = true;
             this.listener = listener;
             params.packages.addAll(packages);
+            params.partition = partition;
             params.timeout = 0;
         }
 

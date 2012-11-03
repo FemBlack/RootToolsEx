@@ -38,9 +38,14 @@ public class AppManager {
     public static final String PARTITION_SYSTEM = "system";
     public static final String PARTITION_TRASH  = ".roottools.trash";
 
-    public static final int FLAG_OVERWRITE      = 1;
-    public static final int FLAG_CHECKSPACE     = 2;
-    public static final int FLAG_REBOOT         = 4;
+    // Flags for moving apps
+    public static final int FLAG_OVERWRITE      = 0x01;
+    public static final int FLAG_REBOOT         = 0x02;
+
+    // Flags for wiping trash
+    public static final int FLAG_WIPEDATA       = 0x10;
+    public static final int FLAG_WIPECACHE      = 0x20;
+
 
     /**
      * Check if an app is installed on a particular partition or not.
@@ -100,7 +105,7 @@ public class AppManager {
                 packageName,
                 PARTITION_DATA,
                 PARTITION_SYSTEM,
-                listener).execute(FLAG_OVERWRITE | FLAG_CHECKSPACE);
+                listener).execute(FLAG_OVERWRITE);
     }
 
     /**
@@ -117,7 +122,7 @@ public class AppManager {
                 packageName,
                 PARTITION_DATA,
                 PARTITION_SYSTEM,
-                listener).execute(FLAG_OVERWRITE | FLAG_CHECKSPACE | addFlags);
+                listener).execute(FLAG_OVERWRITE | addFlags);
     }
 
     /**
@@ -159,7 +164,6 @@ public class AppManager {
      * The exact behavior can be customized using additional flags:
      *
      * FLAG_OVERWRITE   --> Overwrite the target if already existing
-     * FLAG_CHECKSPACE  --> Check available diskspace before moving
      * FLAG_REBOOT      --> Immediately reboot device when done
      *
      * @param packageName Package name of the App e.g. com.example.myapp
@@ -183,7 +187,6 @@ public class AppManager {
      * The exact behavior can be customized using additional flags:
      *
      * FLAG_OVERWRITE   --> Overwrite the target if already existing
-     * FLAG_CHECKSPACE  --> Check available diskspace before moving
      * FLAG_REBOOT      --> Immediately reboot device when done
      *
      * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
@@ -211,13 +214,33 @@ public class AppManager {
     }
 
     /**
-     * Remove packages from trash permanently.
+     * Remove packages from trash permanently. Erases cache and the data folder as well.
      *
      * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
      * @param listener returns the error code when job is finished
      */
     public static void wipePackageFromTrash(List<String> packages, ErrorCode.OutputListener listener) {
-        Internal.wipePackagesFromTrash(packages, listener);
+        new ShellExec.Worker(
+                ShellExec.API_EX_WIPEAPP,
+                packages,
+                PARTITION_TRASH,
+                listener).execute(FLAG_WIPECACHE | FLAG_WIPEDATA);
+    }
+
+    /**
+     * Remove packages from a partition permanently. The exact behavior can be customized with some flags.
+     *
+     * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
+     * @param partition The partition to wipe the packages from e.g. PARTITION_TRASH
+     * @param flags Additional flags
+     * @param listener returns the error code when job is finished
+     */
+    public static void wipePackageFromPartitionEx(List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
+        new ShellExec.Worker(
+                ShellExec.API_EX_WIPEAPP,
+                packages,
+                partition,
+                listener).execute(0);
     }
 
     /**
@@ -344,19 +367,21 @@ public class AppManager {
             }
             else result.errorCode = ErrorCode.NOT_EXISTING;
 
-            if (target.equals(PARTITION_TRASH)) {
-                // special handling for SD card
-                if (!RootTools.hasEnoughSpaceOnSdCard(apkSpace)) {
-                    result.errorCode = ErrorCode.INSUFFICIENT_SPACE;
+            if (result.errorCode == ErrorCode.NONE) {
+                if (target.equals(PARTITION_TRASH)) {
+                    // special handling for SD card
+                    if (!RootTools.hasEnoughSpaceOnSdCard(apkSpace)) {
+                        result.errorCode = ErrorCode.INSUFFICIENT_SPACE;
+                    }
                 }
-            }
-            else {
-                // check if APK fits on target partition
-                long freeDiskSpace = RootTools.getSpace(getPartitionPath(target)) * 1024;
-                Log.d(TAG, "Available disk space on " + target + ": " + freeDiskSpace + " bytes");
+                else {
+                    // check if APK fits on target partition
+                    long freeDiskSpace = RootTools.getSpace(getPartitionPath(target)) * 1024;
+                    Log.d(TAG, "Available disk space on " + target + ": " + freeDiskSpace + " bytes");
 
-                if ((apkSpace < 1) || (freeDiskSpace < apkSpace)) {
-                    result.errorCode = ErrorCode.INSUFFICIENT_SPACE;
+                    if ((apkSpace < 1) || (freeDiskSpace < apkSpace)) {
+                        result.errorCode = ErrorCode.INSUFFICIENT_SPACE;
+                    }
                 }
             }
             return result;
@@ -377,21 +402,22 @@ public class AppManager {
             HashMap<String, String> table = new HashMap<String, String>();
             for (String packageName : packages) {
                 ResultSet result = packageFitsOnPartition(exec, packageName, sourcePartition, targetPartition);
-                if ((flags & AppManager.FLAG_CHECKSPACE) == AppManager.FLAG_CHECKSPACE) {
+                if (result.errorCode != ErrorCode.NONE) {
                     errorCode = result.errorCode;
-                }
-                table.put(packageName, result.filename);
-                if (errorCode != ErrorCode.NONE) {
                     break;
                 }
+                table.put(packageName, result.filename);
             }
 
-            // create trash if not existing
-            if (targetPartition.equals(PARTITION_TRASH)) {
-                File trash = new File(getPartitionPath(targetPartition) + "/app");
-                if (!trash.isDirectory()) {
-                    if (!trash.mkdirs()) {
-                        errorCode = ErrorCode.NO_EXTERNAL_STORAGE;
+            if (errorCode == ErrorCode.NONE) {
+
+                // create trash if not existing
+                if (targetPartition.equals(PARTITION_TRASH)) {
+                    File trash = new File(getPartitionPath(targetPartition) + "/app");
+                    if (!trash.isDirectory()) {
+                        if (!trash.mkdirs()) {
+                            errorCode = ErrorCode.NO_EXTERNAL_STORAGE;
+                        }
                     }
                 }
             }
@@ -410,9 +436,13 @@ public class AppManager {
 
                     for (String packageName : packages) {
                         String sourcePath = table.get(packageName);
+                        if (sourcePath == null) {
+                            errorCode = ErrorCode.INTERNAL;
+                            break;
+                        }
                         String targetPath = sourcePath.replace(
-                                getPartitionPath(sourcePartition) + "/app/",
-                                getPartitionPath(targetPartition) + "/app/");
+                            getPartitionPath(sourcePartition) + "/app/",
+                            getPartitionPath(targetPartition) + "/app/");
 
                         // prepare move command
                         String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
@@ -463,10 +493,9 @@ public class AppManager {
             listener.onResult(ErrorCode.NONE, output);
         }
 
-        private static void wipePackagesFromTrash(List<String> packages, ErrorCode.OutputListener listener) {
+        public static int wipePackages(ShellExec exec, List<String> packages, String partition, int flags) {
             int errorCode = ErrorCode.NONE;
-            ArrayList<String> output = new ArrayList<String>();
-            File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
+            File root = new File(getPartitionPath(partition) + "/app/");
             File[] files = root.listFiles();
             if (files != null) {
                 for (String packageName : packages) {
@@ -478,12 +507,58 @@ public class AppManager {
                         }
                     }
                     if (!found) {
-                        output.add("Package not found: " + packageName);
+                        exec.output.add("Package not found: " + packageName);
                         errorCode = ErrorCode.NOT_EXISTING;
                     }
                 }
             }
-            listener.onResult(errorCode, output);
+
+            if (errorCode == ErrorCode.NONE) {
+                if ((flags & FLAG_WIPECACHE) > 0) {
+                    final String CACHE = "/data/dalvik-cache/";
+                    errorCode = exec.run("busybox ls " + CACHE);
+                    if (errorCode == ErrorCode.NONE) {
+
+                        // parse files in cache
+                        List<String> queue = new ArrayList<String>();
+                        for (String line : exec.output) {
+                            String[] sl = line.split("@");
+                            for (String s : sl) {
+                                if (s.endsWith(".apk")) {
+                                    for (String packageName : packages) {
+                                        if (equalsPackage(s, packageName)) {
+                                            queue.add(line);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+
+                        // remove them one by one
+                        for (String filename : queue) {
+                            errorCode = exec.run("busybox rm " + CACHE + filename);
+                            if (errorCode != ErrorCode.NONE) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (errorCode == ErrorCode.NONE) {
+                if ((flags & FLAG_WIPEDATA) > 0) {
+                    final String DATA = "/data/data/";
+                    for (String packageName : packages) {
+                        errorCode = exec.run("busybox rm -r " + DATA + packageName);
+                        if (errorCode != ErrorCode.NONE) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return errorCode;
         }
     }
 }
