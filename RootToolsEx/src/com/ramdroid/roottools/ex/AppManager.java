@@ -16,12 +16,20 @@ package com.ramdroid.roottools.ex;
  limitations under the License.
  */
 
+import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Environment;
 import android.util.Log;
 
 import com.stericson.RootTools.RootTools;
 
-import java.io.File;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -39,13 +47,15 @@ public class AppManager {
     public static final String PARTITION_TRASH  = ".roottools.trash";
 
     // Flags for moving apps
-    public static final int FLAG_OVERWRITE      = 0x01;
-    public static final int FLAG_REBOOT         = 0x02;
+    public static final int FLAG_OVERWRITE      = 0x0001;
+    public static final int FLAG_REBOOT         = 0x0002;
 
     // Flags for wiping trash
-    public static final int FLAG_WIPEDATA       = 0x10;
-    public static final int FLAG_WIPECACHE      = 0x20;
+    public static final int FLAG_WIPEDATA       = 0x0010;
+    public static final int FLAG_WIPECACHE      = 0x0020;
 
+    // Flags for reading from trash
+    public static final int FLAG_METADATA       = 0x0100;
 
     /**
      * Check if an app is installed on a particular partition or not.
@@ -205,12 +215,50 @@ public class AppManager {
     }
 
     /**
+     * Moves a couple of packages to trash and generates a metafile containing the application icon.
+     *
+     * @param context The application context is needed for accessing package manager
+     * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
+     * @param partition Source partition
+     * @param listener returns the error code when job is finished
+     */
+    public static void moveAppToTrash(Context context, List<String> packages, String partition, ErrorCode.OutputListener listener) {
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
+                context,
+                packages,
+                partition,
+                PARTITION_TRASH,
+                listener).execute(0);
+    }
+
+    /**
+     * Moves a couple of packages to trash and generates a metafile containing the application icon.
+     *
+     * @param context The application context is needed for accessing package manager
+     * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
+     * @param partition Source partition
+     * @param flags Additional flags
+     * @param listener returns the error code when job is finished
+     */
+    public static void moveAppToTrashEx(Context context, List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
+        new ShellExec.Worker(
+                ShellExec.API_EX_MOVEAPPEX,
+                context,
+                packages,
+                partition,
+                PARTITION_TRASH,
+                listener).execute(flags);
+    }
+
+    /**
      * Returns the list of all packages in the trash.
      *
-     * @param listener returns the list of packages
+     * @param flags Additional flags e.g. FLAG_METADATA
+     * @return the list of packages
      */
-    public static void getPackagesFromTrash(ErrorCode.OutputListener listener) {
-        Internal.getPackagesFromTrash(listener);
+    public static ArrayList<TrashPackageInfo> getPackagesFromTrash(int flags) {
+        return Internal.getPackagesFromTrash(flags);
     }
 
     /**
@@ -395,7 +443,7 @@ public class AppManager {
             return path;
         }
 
-        public static int moveAppEx(ShellExec exec, List<String> packages, String sourcePartition, String targetPartition, int flags) {
+        public static int moveAppEx(ShellExec exec, Context context, List<String> packages, String sourcePartition, String targetPartition, int flags) {
             int errorCode = ErrorCode.NONE;
 
             // check disk space
@@ -444,6 +492,11 @@ public class AppManager {
                             getPartitionPath(sourcePartition) + "/app/",
                             getPartitionPath(targetPartition) + "/app/");
 
+                        if (targetPartition.equals(PARTITION_TRASH)) {
+                            // generate meta data for packages moved to trash
+                            Trash.put(context, packageName, targetPath);
+                        }
+
                         // prepare move command
                         String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
                         if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
@@ -481,16 +534,20 @@ public class AppManager {
             return errorCode;
         }
 
-        private static void getPackagesFromTrash(ErrorCode.OutputListener listener) {
-            ArrayList<String> output = new ArrayList<String>();
+        private static ArrayList<TrashPackageInfo> getPackagesFromTrash(int flags) {
+            ArrayList<TrashPackageInfo> output = new ArrayList<TrashPackageInfo>();
             File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
             File[] files = root.listFiles();
             if (files != null) {
                 for (File f : files) {
-                    output.add(f.getName());
+                    String filename = f.getPath();
+                    if (filename.endsWith(".metadata")) {
+                        TrashPackageInfo info = Trash.get(filename, flags);
+                        output.add(info);
+                    }
                 }
             }
-            listener.onResult(ErrorCode.NONE, output);
+            return output;
         }
 
         public static int wipePackages(ShellExec exec, List<String> packages, String partition, int flags) {
@@ -559,6 +616,132 @@ public class AppManager {
             }
 
             return errorCode;
+        }
+    }
+
+    public static class TrashPackageInfo {
+        private String filename;
+        private String packageName;
+        private String label;
+        private Bitmap bitmap;
+
+        public TrashPackageInfo() {
+            this.filename = "";
+            this.packageName = "";
+            this.label = "";
+        }
+
+        private TrashPackageInfo(String filename) {
+            this.filename = filename;
+            this.packageName = "";
+            this.label = "";
+        }
+
+        public String getFilename() {
+            return filename;
+        }
+
+        public String getPackageName() {
+            return packageName;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public Bitmap getBitmap() {
+            return bitmap;
+        }
+    }
+
+    static class Trash {
+
+        private final static int VERSION = 1;
+
+        private static int put(Context context, String packageName, String outputFile) {
+            int errorCode = ErrorCode.NONE;
+            if (context == null) {
+                errorCode = ErrorCode.INVALID_CONTEXT;
+            }
+
+            TrashPackageInfo metadata = new TrashPackageInfo();
+
+            // read application icon
+            if (errorCode == ErrorCode.NONE) {
+                try {
+                    PackageManager pm = context.getPackageManager();
+                    ApplicationInfo ai = pm.getApplicationInfo(packageName, 0);
+                    metadata.label = pm.getApplicationLabel(ai).toString();
+                    Drawable icon = pm.getApplicationIcon(packageName);
+                    metadata.bitmap = ((BitmapDrawable) icon).getBitmap();
+                } catch (PackageManager.NameNotFoundException e) {
+                    errorCode = ErrorCode.NOT_EXISTING;
+                }
+            }
+
+            // write bitmap into output file
+            if (errorCode == ErrorCode.NONE) {
+                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                metadata.bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+
+                OutputStream out = null;
+                try {
+                    out = new BufferedOutputStream(new FileOutputStream(outputFile.replace(".apk", ".metadata")));
+                    out.write(VERSION);
+                    out.write(metadata.label.length());
+                    out.write(metadata.label.getBytes());
+                    out.write(packageName.length());
+                    out.write(packageName.getBytes());
+                    out.write(stream.toByteArray());
+                }
+                catch(FileNotFoundException e) {
+                }
+                catch (IOException e) {
+                }
+
+                if (out != null) {
+                    try {
+                        out.close();
+                    } catch (IOException e) {
+                    }
+                }
+            }
+            return errorCode;
+        }
+
+        private static TrashPackageInfo get(String inputFile, int flags) {
+            int version;
+
+            TrashPackageInfo metadata = new TrashPackageInfo(inputFile.replace(".metadata", ".apk"));
+            InputStream in = null;
+            try {
+                in = new BufferedInputStream(new FileInputStream(inputFile));
+                version = in.read();
+                if (version == VERSION) {
+
+                    // read application label
+                    int len = in.read();
+                    for (int i=0; i<len; ++i) {
+                        metadata.label += (char)in.read();
+                    }
+
+                    // read package name
+                    len = in.read();
+                    for (int i=0; i<len; ++i) {
+                        metadata.packageName += (char)in.read();
+                    }
+
+                    // read application icon
+                    if ((flags & FLAG_METADATA) > 0) {
+                        metadata.bitmap = BitmapFactory.decodeStream(in);
+                    }
+                }
+            }
+            catch(FileNotFoundException e) {
+            }
+            catch (IOException e) {
+            }
+            return metadata;
         }
     }
 }

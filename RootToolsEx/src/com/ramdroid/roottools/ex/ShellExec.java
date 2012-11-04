@@ -16,6 +16,7 @@ package com.ramdroid.roottools.ex;
  limitations under the License.
  */
 
+import android.content.Context;
 import android.os.AsyncTask;
 import android.util.Log;
 import com.stericson.RootTools.exceptions.RootDeniedException;
@@ -137,6 +138,7 @@ class ShellExec {
         else if (api == API_EX_MOVEAPPEX) {
             errorCode = AppManager.Internal.moveAppEx(
                     this,
+                    params.context,
                     params.packages,
                     params.partition,
                     params.target,
@@ -165,6 +167,7 @@ class ShellExec {
         private String partition;
         private String target;
         private int timeout;
+        private Context context;
 
         public Params() {
         }
@@ -193,6 +196,7 @@ class ShellExec {
             this.api = api;
             this.listener = listener;
             this.useRoot = true;
+            params.context = null;
             params.timeout = 0;
         }
 
@@ -200,6 +204,7 @@ class ShellExec {
             this.api = api;
             this.useRoot = useRoot;
             this.listener = listener;
+            params.context = null;
             params.commands = new String[] { command };
             params.timeout = 0;
         }
@@ -208,6 +213,7 @@ class ShellExec {
             this.api = api;
             this.useRoot = useRoot;
             this.listener = listener;
+            params.context = null;
             params.commands = builder.commands.toArray(new String[builder.commands.size()]);
             params.timeout = builder.timeout;
         }
@@ -216,6 +222,7 @@ class ShellExec {
             this.api = api;
             this.useRoot = true;
             this.listener = listener;
+            params.context = null;
             params.packages.add(packageName);
             params.partition = partition;
             params.timeout = 0;
@@ -225,7 +232,19 @@ class ShellExec {
             this.api = api;
             this.useRoot = true;
             this.listener = listener;
+            params.context = null;
             params.packages.add(packageName);
+            params.partition = partition;
+            params.target = target;
+            params.timeout = 0;
+        }
+
+        public Worker(int api, Context context, List<String> packages, String partition, String target, ErrorCode.OutputListener listener) {
+            this.api = api;
+            this.useRoot = true;
+            this.listener = listener;
+            params.context = context;
+            params.packages.addAll(packages);
             params.partition = partition;
             params.target = target;
             params.timeout = 0;
@@ -235,6 +254,7 @@ class ShellExec {
             this.api = api;
             this.useRoot = true;
             this.listener = listener;
+            params.context = null;
             params.packages.addAll(packages);
             params.partition = partition;
             params.timeout = 0;
@@ -244,6 +264,7 @@ class ShellExec {
             this.api = api;
             this.useRoot = true;
             this.listener = listener;
+            params.context = null;
             params.packages.addAll(packages);
             params.partition = partition;
             params.target = target;
