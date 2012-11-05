@@ -30,6 +30,7 @@ import android.util.Log;
 import com.stericson.RootTools.RootTools;
 
 import java.io.*;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -252,10 +253,21 @@ public class AppManager {
     }
 
     /**
+     * Returns the package info for one app.
+     *
+     * @param packageName The package name.
+     * @param flags Additional flags e.g. FLAG_METADATA
+     * @return the package information
+     */
+    public static TrashPackageInfo getPackageFromTrash(String packageName, int flags) {
+        return Internal.getPackageFromTrash(packageName, flags);
+    }
+
+    /**
      * Returns the list of all packages in the trash.
      *
      * @param flags Additional flags e.g. FLAG_METADATA
-     * @return the list of packages
+     * @return the list of package information records
      */
     public static ArrayList<TrashPackageInfo> getPackagesFromTrash(int flags) {
         return Internal.getPackagesFromTrash(flags);
@@ -300,6 +312,8 @@ public class AppManager {
      */
     public static class TrashPackageInfo {
 
+        private final static int VERSION = 1;
+
         private String filename;
         private String packageName;
         private String label;
@@ -307,12 +321,6 @@ public class AppManager {
 
         public TrashPackageInfo() {
             this.filename = "";
-            this.packageName = "";
-            this.label = "";
-        }
-
-        private TrashPackageInfo(String filename) {
-            this.filename = filename;
             this.packageName = "";
             this.label = "";
         }
@@ -343,6 +351,125 @@ public class AppManager {
          */
         public Bitmap getIcon() {
             return icon;
+        }
+
+        private TrashPackageInfo(String filename) {
+            this.filename = filename;
+            this.packageName = "";
+            this.label = "";
+        }
+
+        /**
+         * Generate a meta file for a package.
+         *
+         * @param context The application context.
+         * @param packageName The package name that identifies the app.
+         * @param filename The filename of the APK.
+         * @return The error code or ErrorCode.NONE when successful.
+         */
+        private static int put(Context context, String packageName, String filename) {
+            int errorCode = ErrorCode.NONE;
+            if (context == null) {
+                errorCode = ErrorCode.INVALID_CONTEXT;
+            }
+
+            TrashPackageInfo packageInfo = new TrashPackageInfo();
+
+            // read application icon
+            if (errorCode == ErrorCode.NONE) {
+                try {
+                    PackageManager pm = context.getPackageManager();
+                    ApplicationInfo ai = pm.getApplicationInfo(packageName, 0);
+                    packageInfo.label = pm.getApplicationLabel(ai).toString();
+                    packageInfo.icon = ((BitmapDrawable) pm.getApplicationIcon(packageName)).getBitmap();
+                } catch (PackageManager.NameNotFoundException e) {
+                    errorCode = ErrorCode.NOT_EXISTING;
+                }
+            }
+
+            // write bitmap into output file
+            if (errorCode == ErrorCode.NONE) {
+                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                packageInfo.icon.compress(Bitmap.CompressFormat.PNG, 100, stream);
+
+                OutputStream out = null;
+                try {
+                    out = new BufferedOutputStream(new FileOutputStream(filename.replace(".apk", ".metadata")));
+                    out.write(VERSION);
+                    out.write(packageInfo.label.length());
+                    out.write(packageInfo.label.getBytes());
+                    out.write(packageName.length());
+                    out.write(packageName.getBytes());
+                    out.write(stream.size());
+                    out.write(stream.toByteArray());
+                }
+                catch(FileNotFoundException e) {
+                }
+                catch (IOException e) {
+                }
+
+                if (out != null) {
+                    try {
+                        out.close();
+                    } catch (IOException e) {
+                    }
+                }
+            }
+            return errorCode;
+        }
+
+        /**
+         * Read the package info from a meta file. By default only the package name and application label is read.
+         * If you need to get the default icon as well then you have to add FLAG_METADATA in the flags.
+         *
+         * @param filename The meta file name.
+         * @param flags Additional flags.
+         * @return The package info containing all details.
+         */
+        private static TrashPackageInfo get(String filename, int flags) {
+            TrashPackageInfo packageInfo = new TrashPackageInfo(filename.replace(".metadata", ".apk"));
+            InputStream in = null;
+
+            try {
+                in = new BufferedInputStream(new FileInputStream(filename));
+                int version = in.read();
+                if (version == VERSION) {
+
+                    // read application label
+                    int len = in.read();
+                    for (int i=0; i<len; ++i) {
+                        packageInfo.label += (char)in.read();
+                    }
+
+                    // read package name
+                    len = in.read();
+                    for (int i=0; i<len; ++i) {
+                        packageInfo.packageName += (char)in.read();
+                    }
+
+                    // read application icon
+                    if ((flags & FLAG_METADATA) > 0) {
+                        len = in.read();
+                        byte[] buffer = new byte[len];
+                        in.read(buffer, 0, len);
+                        // TODO: this doesn't work
+                        packageInfo.icon = BitmapFactory.decodeByteArray(buffer, 0, buffer.length);
+                    }
+                }
+            }
+            catch(FileNotFoundException e) {
+            }
+            catch (IOException e) {
+            }
+
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException e) {
+                }
+            }
+
+            return packageInfo;
         }
     }
 
@@ -427,8 +554,12 @@ public class AppManager {
         }
 
         private static boolean equalsPackage(String line, String packageName) {
+            return equalsFilename(line, packageName, ".apk");
+        }
+
+        private static boolean equalsFilename(String line, String packageName, String ext) {
             boolean found = false;
-            if (line.endsWith(".apk")) {
+            if (line.endsWith(ext)) {
                 int sep = line.lastIndexOf("-");
                 if (sep > 0) {
                     String parsedPackageName = line.substring(0, sep);
@@ -549,7 +680,7 @@ public class AppManager {
 
                         if (targetPartition.equals(PARTITION_TRASH)) {
                             // generate meta data for packages moved to trash
-                            Trash.put(context, packageName, targetPath);
+                            TrashPackageInfo.put(context, packageName, targetPath);
                         }
 
                         // prepare move command
@@ -589,6 +720,25 @@ public class AppManager {
             return errorCode;
         }
 
+
+        private static TrashPackageInfo getPackageFromTrash(String packageName, int flags) {
+            TrashPackageInfo output = null;
+            File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
+            File[] files = root.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    String filename = f.getPath();
+                    if (filename.endsWith(".metadata")) {
+                        if (equalsFilename(f.getName(), packageName, ".metadata")) {
+                            output = TrashPackageInfo.get(filename, flags);
+                            break;
+                        }
+                    }
+                }
+            }
+            return output;
+        }
+
         private static ArrayList<TrashPackageInfo> getPackagesFromTrash(int flags) {
             ArrayList<TrashPackageInfo> output = new ArrayList<TrashPackageInfo>();
             File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
@@ -597,7 +747,7 @@ public class AppManager {
                 for (File f : files) {
                     String filename = f.getPath();
                     if (filename.endsWith(".metadata")) {
-                        TrashPackageInfo info = Trash.get(filename, flags);
+                        TrashPackageInfo info = TrashPackageInfo.get(filename, flags);
                         output.add(info);
                     }
                 }
@@ -671,107 +821,6 @@ public class AppManager {
             }
 
             return errorCode;
-        }
-    }
-
-    /**
-     * Private class to read/write the files with meta information.
-     */
-    static class Trash {
-
-        private final static int VERSION = 1;
-
-        private static int put(Context context, String packageName, String outputFile) {
-            int errorCode = ErrorCode.NONE;
-            if (context == null) {
-                errorCode = ErrorCode.INVALID_CONTEXT;
-            }
-
-            TrashPackageInfo packageInfo = new TrashPackageInfo();
-
-            // read application icon
-            if (errorCode == ErrorCode.NONE) {
-                try {
-                    PackageManager pm = context.getPackageManager();
-                    ApplicationInfo ai = pm.getApplicationInfo(packageName, 0);
-                    packageInfo.label = pm.getApplicationLabel(ai).toString();
-                    packageInfo.icon = ((BitmapDrawable) pm.getApplicationIcon(packageName)).getBitmap();
-                } catch (PackageManager.NameNotFoundException e) {
-                    errorCode = ErrorCode.NOT_EXISTING;
-                }
-            }
-
-            // write bitmap into output file
-            if (errorCode == ErrorCode.NONE) {
-                ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                packageInfo.icon.compress(Bitmap.CompressFormat.PNG, 100, stream);
-
-                OutputStream out = null;
-                try {
-                    out = new BufferedOutputStream(new FileOutputStream(outputFile.replace(".apk", ".metadata")));
-                    out.write(VERSION);
-                    out.write(packageInfo.label.length());
-                    out.write(packageInfo.label.getBytes());
-                    out.write(packageName.length());
-                    out.write(packageName.getBytes());
-                    out.write(stream.toByteArray());
-                }
-                catch(FileNotFoundException e) {
-                }
-                catch (IOException e) {
-                }
-
-                if (out != null) {
-                    try {
-                        out.close();
-                    } catch (IOException e) {
-                    }
-                }
-            }
-            return errorCode;
-        }
-
-        private static TrashPackageInfo get(String inputFile, int flags) {
-            TrashPackageInfo packageInfo = new TrashPackageInfo(inputFile.replace(".metadata", ".apk"));
-            InputStream in = null;
-
-            try {
-                in = new BufferedInputStream(new FileInputStream(inputFile));
-                int version = in.read();
-                if (version == VERSION) {
-
-                    // read application label
-                    int len = in.read();
-                    for (int i=0; i<len; ++i) {
-                        packageInfo.label += (char)in.read();
-                    }
-
-                    // read package name
-                    len = in.read();
-                    for (int i=0; i<len; ++i) {
-                        packageInfo.packageName += (char)in.read();
-                    }
-
-                    // read application icon
-                    if ((flags & FLAG_METADATA) > 0) {
-                        packageInfo.icon = BitmapFactory.decodeStream(in);
-                    }
-                }
-                            }
-            catch(FileNotFoundException e) {
-            }
-            catch (IOException e) {
-            }
-
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (IOException e) {
-                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                }
-            }
-
-            return packageInfo;
         }
     }
 }
