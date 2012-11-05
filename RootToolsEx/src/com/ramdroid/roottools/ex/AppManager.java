@@ -292,6 +292,61 @@ public class AppManager {
     }
 
     /**
+     * The PackageManager APIs including PackageInfo (containing the application's name and icon) obviously isn't
+     * available anymore after an app has been moved to trash. Therefore a separate file is maintained for each trashed
+     * package that contains such information.
+     *
+     * The packages can be parsed with the getPackagesFromTrash() function in {@link AppManager}.
+     */
+    public static class TrashPackageInfo {
+
+        private String filename;
+        private String packageName;
+        private String label;
+        private Bitmap icon;
+
+        public TrashPackageInfo() {
+            this.filename = "";
+            this.packageName = "";
+            this.label = "";
+        }
+
+        private TrashPackageInfo(String filename) {
+            this.filename = filename;
+            this.packageName = "";
+            this.label = "";
+        }
+
+        /**
+         * @return The full path to the APK.
+         */
+        public String getFilename() {
+            return filename;
+        }
+
+        /**
+         * @return The package name of the app.
+         */
+        public String getPackageName() {
+            return packageName;
+        }
+
+        /**
+         * @return The full name of the app.
+         */
+        public String getLabel() {
+            return label;
+        }
+
+        /**
+         * @return The default icon of the app..
+         */
+        public Bitmap getIcon() {
+            return icon;
+        }
+    }
+
+    /**
      * Blocking shell commands that are doing all the hard work.
      * They are called by the {@link ShellExec.Worker} to avoid blocking the UI thread.
      */
@@ -619,41 +674,9 @@ public class AppManager {
         }
     }
 
-    public static class TrashPackageInfo {
-        private String filename;
-        private String packageName;
-        private String label;
-        private Bitmap bitmap;
-
-        public TrashPackageInfo() {
-            this.filename = "";
-            this.packageName = "";
-            this.label = "";
-        }
-
-        private TrashPackageInfo(String filename) {
-            this.filename = filename;
-            this.packageName = "";
-            this.label = "";
-        }
-
-        public String getFilename() {
-            return filename;
-        }
-
-        public String getPackageName() {
-            return packageName;
-        }
-
-        public String getLabel() {
-            return label;
-        }
-
-        public Bitmap getBitmap() {
-            return bitmap;
-        }
-    }
-
+    /**
+     * Private class to read/write the files with meta information.
+     */
     static class Trash {
 
         private final static int VERSION = 1;
@@ -664,16 +687,15 @@ public class AppManager {
                 errorCode = ErrorCode.INVALID_CONTEXT;
             }
 
-            TrashPackageInfo metadata = new TrashPackageInfo();
+            TrashPackageInfo packageInfo = new TrashPackageInfo();
 
             // read application icon
             if (errorCode == ErrorCode.NONE) {
                 try {
                     PackageManager pm = context.getPackageManager();
                     ApplicationInfo ai = pm.getApplicationInfo(packageName, 0);
-                    metadata.label = pm.getApplicationLabel(ai).toString();
-                    Drawable icon = pm.getApplicationIcon(packageName);
-                    metadata.bitmap = ((BitmapDrawable) icon).getBitmap();
+                    packageInfo.label = pm.getApplicationLabel(ai).toString();
+                    packageInfo.icon = ((BitmapDrawable) pm.getApplicationIcon(packageName)).getBitmap();
                 } catch (PackageManager.NameNotFoundException e) {
                     errorCode = ErrorCode.NOT_EXISTING;
                 }
@@ -682,14 +704,14 @@ public class AppManager {
             // write bitmap into output file
             if (errorCode == ErrorCode.NONE) {
                 ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                metadata.bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+                packageInfo.icon.compress(Bitmap.CompressFormat.PNG, 100, stream);
 
                 OutputStream out = null;
                 try {
                     out = new BufferedOutputStream(new FileOutputStream(outputFile.replace(".apk", ".metadata")));
                     out.write(VERSION);
-                    out.write(metadata.label.length());
-                    out.write(metadata.label.getBytes());
+                    out.write(packageInfo.label.length());
+                    out.write(packageInfo.label.getBytes());
                     out.write(packageName.length());
                     out.write(packageName.getBytes());
                     out.write(stream.toByteArray());
@@ -710,38 +732,46 @@ public class AppManager {
         }
 
         private static TrashPackageInfo get(String inputFile, int flags) {
-            int version;
-
-            TrashPackageInfo metadata = new TrashPackageInfo(inputFile.replace(".metadata", ".apk"));
+            TrashPackageInfo packageInfo = new TrashPackageInfo(inputFile.replace(".metadata", ".apk"));
             InputStream in = null;
+
             try {
                 in = new BufferedInputStream(new FileInputStream(inputFile));
-                version = in.read();
+                int version = in.read();
                 if (version == VERSION) {
 
                     // read application label
                     int len = in.read();
                     for (int i=0; i<len; ++i) {
-                        metadata.label += (char)in.read();
+                        packageInfo.label += (char)in.read();
                     }
 
                     // read package name
                     len = in.read();
                     for (int i=0; i<len; ++i) {
-                        metadata.packageName += (char)in.read();
+                        packageInfo.packageName += (char)in.read();
                     }
 
                     // read application icon
                     if ((flags & FLAG_METADATA) > 0) {
-                        metadata.bitmap = BitmapFactory.decodeStream(in);
+                        packageInfo.icon = BitmapFactory.decodeStream(in);
                     }
                 }
-            }
+                            }
             catch(FileNotFoundException e) {
             }
             catch (IOException e) {
             }
-            return metadata;
+
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException e) {
+                    e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                }
+            }
+
+            return packageInfo;
         }
     }
 }
