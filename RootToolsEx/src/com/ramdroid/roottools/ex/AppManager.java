@@ -686,35 +686,58 @@ public class AppManager {
                 if (errorCode == ErrorCode.NONE) {
 
                     for (String packageName : packages) {
+                        // check for valid source path
                         String sourcePath = table.get(packageName);
                         if (sourcePath == null) {
                             errorCode = ErrorCode.INTERNAL;
-                            break;
                         }
-                        String targetPath = sourcePath.replace(
-                            getPartitionPath(sourcePartition) + "/app/",
-                            getPartitionPath(targetPartition) + "/app/");
+                        // is this app odexed?
+                        boolean isOdexed = new File(sourcePath.replace(".apk", ".odex")).exists();
+                        if (isOdexed && (
+                                !targetPartition.equals(PARTITION_TRASH) ||
+                                !sourcePartition.equals(PARTITION_TRASH))
+                                ) {
+                            errorCode = ErrorCode.ODEX_NOT_SUPPORTED;
+                        }
 
-                        if (targetPartition.equals(PARTITION_TRASH)) {
-                            // generate meta data for packages moved to trash
-                            TrashPackageInfo.put(context, packageName, targetPath, sourcePartition);
-                        }
-
-                        // prepare move command
-                        String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
-                        if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
-                            errorCode = appExistsOnPartition(exec, packageName, targetPartition);
-                            if (errorCode == ErrorCode.NONE) {
-                                // App is already existing in target partition, so just remove it from source partition
-                                shellCmd = "busybox rm " + sourcePath;
-                            }
-                            else if (errorCode == ErrorCode.NOT_EXISTING) {
-                                errorCode = ErrorCode.NONE;
-                            }
-                        }
                         if (errorCode == ErrorCode.NONE) {
-                            // execute in shell
-                            errorCode = exec.run(shellCmd);
+                            String targetPath = sourcePath.replace(
+                                    getPartitionPath(sourcePartition) + "/app/",
+                                    getPartitionPath(targetPartition) + "/app/");
+
+                            if (targetPartition.equals(PARTITION_TRASH)) {
+                                // generate meta data for packages moved to trash
+                                TrashPackageInfo.put(context, packageName, targetPath, sourcePartition);
+                            }
+
+                            // prepare move command
+                            String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
+                            if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
+                                errorCode = appExistsOnPartition(exec, packageName, targetPartition);
+                                if (errorCode == ErrorCode.NONE) {
+                                    // App is already existing in target partition, so just remove it from source partition
+                                    shellCmd = "busybox rm " + sourcePath;
+                                }
+                                else if (errorCode == ErrorCode.NOT_EXISTING) {
+                                    errorCode = ErrorCode.NONE;
+                                }
+                            }
+                            if (errorCode == ErrorCode.NONE) {
+                                // execute in shell
+                                errorCode = exec.run(shellCmd);
+                            }
+                            if (errorCode == ErrorCode.NONE) {
+                                // move odex files to trash
+                                if (isOdexed && (
+                                        targetPartition.equals(PARTITION_TRASH) ||
+                                        sourcePartition.equals(PARTITION_TRASH))
+                                        ) {
+                                    shellCmd = "busybox mv " +
+                                            sourcePath.replace(".apk", ".odex") + " " +
+                                            targetPath.replace(".apk", ".odex");
+                                    errorCode = exec.run(shellCmd);
+                                }
+                            }
                         }
                         if (errorCode != ErrorCode.NONE) {
                             // immediately abort on any errors
@@ -782,10 +805,19 @@ public class AppManager {
                     for (File f : files) {
                         if (equalsPackage(f.getName(), packageName)) {
                             f.delete();
+
+                            // don't forget odex file
+                            File odexfile = new File(f.getPath().replace(".apk", ".odex"));
+                            if (odexfile.exists()) {
+                                odexfile.delete();
+                            }
+
+                            // don't forget metafile, too
                             File metafile = new File(f.getPath().replace(".apk", ".metadata"));
                             if (metafile.exists()) {
                                 metafile.delete();
                             }
+
                             found = true;
                         }
                     }

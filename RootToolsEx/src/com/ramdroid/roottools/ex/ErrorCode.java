@@ -39,6 +39,7 @@ public class ErrorCode {
     public static final int COMMAND_FAILED          = 13;
     public static final int ALREADY_EXISTING        = 14;
     public static final int INTERNAL                = 15;
+    public static final int ODEX_NOT_SUPPORTED      = 16;
 
     /**
      * Interface to receive the error code result.
