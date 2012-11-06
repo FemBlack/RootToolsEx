@@ -400,7 +400,6 @@ public class AppManager {
                     out.write(packageInfo.label.getBytes());
                     out.write(packageName.length());
                     out.write(packageName.getBytes());
-                    out.write(stream.size());
                     out.write(stream.toByteArray());
                 }
                 catch(FileNotFoundException e) {
@@ -449,11 +448,9 @@ public class AppManager {
 
                     // read application icon
                     if ((flags & FLAG_METADATA) > 0) {
-                        len = in.read();
-                        byte[] buffer = new byte[len];
-                        in.read(buffer, 0, len);
-                        // TODO: this doesn't work
-                        packageInfo.icon = BitmapFactory.decodeByteArray(buffer, 0, buffer.length);
+                        byte[] buffer = new byte[100000];
+                        len = in.read(buffer);
+                        packageInfo.icon = BitmapFactory.decodeByteArray(buffer, 0, len);
                     }
                 }
             }
