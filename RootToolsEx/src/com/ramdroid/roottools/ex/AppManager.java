@@ -316,12 +316,14 @@ public class AppManager {
 
         private String filename;
         private String packageName;
+        private String partition;
         private String label;
         private Bitmap icon;
 
         public TrashPackageInfo() {
             this.filename = "";
             this.packageName = "";
+            this.partition = "";
             this.label = "";
         }
 
@@ -337,6 +339,13 @@ public class AppManager {
          */
         public String getPackageName() {
             return packageName;
+        }
+
+        /**
+         * @return The partition the APK was originally existing on
+         */
+        public String getPartition() {
+            return partition;
         }
 
         /**
@@ -356,6 +365,7 @@ public class AppManager {
         private TrashPackageInfo(String filename) {
             this.filename = filename;
             this.packageName = "";
+            this.partition = "";
             this.label = "";
         }
 
@@ -365,15 +375,17 @@ public class AppManager {
          * @param context The application context.
          * @param packageName The package name that identifies the app.
          * @param filename The filename of the APK.
+         * @param partition The source partition of the APK
          * @return The error code or ErrorCode.NONE when successful.
          */
-        private static int put(Context context, String packageName, String filename) {
+        private static int put(Context context, String packageName, String filename, String partition) {
             int errorCode = ErrorCode.NONE;
             if (context == null) {
                 errorCode = ErrorCode.INVALID_CONTEXT;
             }
 
             TrashPackageInfo packageInfo = new TrashPackageInfo();
+            packageInfo.partition = partition;
 
             // read application icon
             if (errorCode == ErrorCode.NONE) {
@@ -400,6 +412,8 @@ public class AppManager {
                     out.write(packageInfo.label.getBytes());
                     out.write(packageName.length());
                     out.write(packageName.getBytes());
+                    out.write(partition.length());
+                    out.write(partition.getBytes());
                     out.write(stream.toByteArray());
                 }
                 catch(FileNotFoundException e) {
@@ -444,6 +458,12 @@ public class AppManager {
                     len = in.read();
                     for (int i=0; i<len; ++i) {
                         packageInfo.packageName += (char)in.read();
+                    }
+
+                    // read source partition
+                    len = in.read();
+                    for (int i=0; i<len; ++i) {
+                        packageInfo.partition += (char)in.read();
                     }
 
                     // read application icon
@@ -677,7 +697,7 @@ public class AppManager {
 
                         if (targetPartition.equals(PARTITION_TRASH)) {
                             // generate meta data for packages moved to trash
-                            TrashPackageInfo.put(context, packageName, targetPath);
+                            TrashPackageInfo.put(context, packageName, targetPath, sourcePartition);
                         }
 
                         // prepare move command
@@ -762,6 +782,10 @@ public class AppManager {
                     for (File f : files) {
                         if (equalsPackage(f.getName(), packageName)) {
                             f.delete();
+                            File metafile = new File(f.getPath().replace(".apk", ".metadata"));
+                            if (metafile.exists()) {
+                                metafile.delete();
+                            }
                             found = true;
                         }
                     }
