@@ -48,8 +48,10 @@ class ShellExec {
     public static final int API_EX_APPFITSONPARTITION       = 102;
     public static final int API_EX_MOVEAPPEX                = 103;
     public static final int API_EX_WIPEAPP                  = 104;
+    public static final int API_EX_GETPACKAGES              = 105;
 
-    public ArrayList<String> output = new ArrayList<String>();;
+    public ArrayList<String> output = new ArrayList<String>();
+    public ArrayList<AppManager.PackageInfoEx> packages = new ArrayList<AppManager.PackageInfoEx>();
 
     private Shell rootShell;
     private boolean useRoot;
@@ -147,6 +149,9 @@ class ShellExec {
         else if (api == API_EX_WIPEAPP) {
             errorCode = AppManager.Internal.wipePackages(this, params.packages, params.partition, flags[0]);
         }
+        else if (api == API_EX_GETPACKAGES) {
+            errorCode = AppManager.Internal.getPackagesFromPartition(this, params.partition, flags[0]);
+        }
         clear();
         return errorCode;
     }
@@ -188,6 +193,7 @@ class ShellExec {
 
         private int api;
         private ErrorCode.OutputListener listener;
+        private ErrorCode.OutputListenerWithPackages listenerEx;
         private ShellExec exec;
         private boolean useRoot;
         private Params params = new Params();
@@ -250,6 +256,15 @@ class ShellExec {
             params.timeout = 0;
         }
 
+        public Worker(int api, String partition, ErrorCode.OutputListenerWithPackages listener) {
+            this.api = api;
+            this.useRoot = true;
+            this.listenerEx = listener;
+            params.context = null;
+            params.partition = partition;
+            params.timeout = 0;
+        }
+
         public Worker(int api, List<String> packages, String partition, ErrorCode.OutputListener listener) {
             this.api = api;
             this.useRoot = true;
@@ -284,6 +299,12 @@ class ShellExec {
                     exec.output = new ArrayList<String>();
                 }
                 listener.onResult(errorCode, exec.output);
+            }
+            else if (listenerEx != null) {
+                if (exec.packages == null) {
+                    exec.packages = new ArrayList<AppManager.PackageInfoEx>();
+                }
+                listenerEx.onResult(errorCode, exec.packages);
             }
         }
     }

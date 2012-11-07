@@ -253,14 +253,34 @@ public class AppManager {
     }
 
     /**
+     * When relying on PackageManager to retrieve the list of installed apps on system or data partition then we
+     * get only the packages that were available at boot, or installed by Android's common install methods. However
+     * if we manually move apps between partitions then PackageManager is not up-to-date anymore. Therefore we parse
+     * the list of installed packages directly from the file system and add more information from PackageManager when
+     * available.
+     *
+     * @param partition The partition of interest
+     * @param flags Additional flags
+     * @param listener returns the error code when job is finished
+     */
+    public static void getPackagesFromPartition(String partition, int flags, ErrorCode.OutputListenerWithPackages listener) {
+        new ShellExec.Worker(
+                ShellExec.API_EX_GETPACKAGES,
+                partition,
+                listener).execute(flags);
+    }
+
+    /**
      * Returns the package info for one app.
      *
      * @param packageName The package name.
      * @param flags Additional flags e.g. FLAG_METADATA
      * @return the package information
      */
-    public static TrashPackageInfo getPackageFromTrash(String packageName, int flags) {
-        return Internal.getPackageFromTrash(packageName, flags);
+    public static PackageInfoEx getPackageFromTrash(String packageName, int flags) {
+        ShellExec exec = new ShellExec(false);
+        Internal.getPackageFromPartition(exec, null, PARTITION_TRASH, packageName, flags);
+        return exec.packages.get(0);
     }
 
     /**
@@ -269,8 +289,10 @@ public class AppManager {
      * @param flags Additional flags e.g. FLAG_METADATA
      * @return the list of package information records
      */
-    public static ArrayList<TrashPackageInfo> getPackagesFromTrash(int flags) {
-        return Internal.getPackagesFromTrash(flags);
+    public static ArrayList<PackageInfoEx> getPackagesFromTrash(int flags) {
+        ShellExec exec = new ShellExec(false);
+        Internal.getPackagesFromPartition(null, PARTITION_TRASH, flags);
+        return exec.packages;
     }
 
     /**
@@ -310,7 +332,7 @@ public class AppManager {
      *
      * The packages can be parsed with the getPackagesFromTrash() function in {@link AppManager}.
      */
-    public static class TrashPackageInfo {
+    public static class PackageInfoEx {
 
         private final static int VERSION = 1;
 
@@ -320,11 +342,22 @@ public class AppManager {
         private String label;
         private Bitmap icon;
 
-        public TrashPackageInfo() {
-            this.filename = "";
-            this.packageName = "";
-            this.partition = "";
-            this.label = "";
+        public PackageInfoEx() {
+            filename = "";
+            packageName = "";
+            partition = "";
+            label = "";
+        }
+
+        public PackageInfoEx(PackageManager pm, PackageInfo packageInfo) {
+            filename = packageInfo.applicationInfo.sourceDir;
+            packageName = packageInfo.packageName;
+            label = pm.getApplicationLabel(packageInfo.applicationInfo).toString();
+
+            if (filename.contains(PARTITION_SYSTEM)) {
+                partition = PARTITION_SYSTEM;
+            }
+            else partition = PARTITION_DATA;
         }
 
         /**
@@ -362,7 +395,7 @@ public class AppManager {
             return icon;
         }
 
-        private TrashPackageInfo(String filename) {
+        private PackageInfoEx(String filename) {
             this.filename = filename;
             this.packageName = "";
             this.partition = "";
@@ -378,13 +411,13 @@ public class AppManager {
          * @param partition The source partition of the APK
          * @return The error code or ErrorCode.NONE when successful.
          */
-        private static int put(Context context, String packageName, String filename, String partition) {
+        private static int createMetaFile(Context context, String packageName, String filename, String partition) {
             int errorCode = ErrorCode.NONE;
             if (context == null) {
                 errorCode = ErrorCode.INVALID_CONTEXT;
             }
 
-            TrashPackageInfo packageInfo = new TrashPackageInfo();
+            PackageInfoEx packageInfo = new PackageInfoEx();
             packageInfo.partition = partition;
 
             // read application icon
@@ -439,8 +472,8 @@ public class AppManager {
          * @param flags Additional flags.
          * @return The package info containing all details.
          */
-        private static TrashPackageInfo get(String filename, int flags) {
-            TrashPackageInfo packageInfo = new TrashPackageInfo(filename.replace(".metadata", ".apk"));
+        private static PackageInfoEx readMetaFile(String filename, int flags) {
+            PackageInfoEx packageInfo = new PackageInfoEx(filename.replace(".metadata", ".apk"));
             InputStream in = null;
 
             try {
@@ -707,7 +740,7 @@ public class AppManager {
 
                             if (targetPartition.equals(PARTITION_TRASH)) {
                                 // generate meta data for packages moved to trash
-                                TrashPackageInfo.put(context, packageName, targetPath, sourcePartition);
+                                PackageInfoEx.createMetaFile(context, packageName, targetPath, sourcePartition);
                             }
 
                             // prepare move command
@@ -760,39 +793,68 @@ public class AppManager {
             return errorCode;
         }
 
+        public static int getPackageFromPartition(ShellExec exec, Context context, String partition, String packageName, int flags) {
+            int errorCode = ErrorCode.NONE;
 
-        private static TrashPackageInfo getPackageFromTrash(String packageName, int flags) {
-            TrashPackageInfo output = null;
-            File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
+            // TODO: create new function to find the PackgeInfo for each filename with the list of files for input
+
+            PackageManager pm = null;
+            List<PackageInfo> packages = null;
+            if (!partition.equals(PARTITION_TRASH)) {
+                pm = context.getPackageManager();
+                packages = pm.getInstalledPackages(0);
+            }
+
+            File root = new File(getPartitionPath(partition) + "/app/");
             File[] files = root.listFiles();
             if (files != null) {
                 for (File f : files) {
                     String filename = f.getPath();
-                    if (filename.endsWith(".metadata")) {
-                        if (equalsFilename(f.getName(), packageName, ".metadata")) {
-                            output = TrashPackageInfo.get(filename, flags);
-                            break;
+                    if (partition.equals(PARTITION_TRASH)) {
+                        // need to read package info from meta file
+                        if (filename.endsWith(".metadata")) {
+                            if (equalsFilename(f.getName(), packageName, ".metadata")) {
+                                exec.packages.add(PackageInfoEx.readMetaFile(filename, flags));
+                                break;
+                            }
                         }
                     }
+                    else if (partition.equals(PARTITION_SYSTEM)) {
+                        if (filename.endsWith(".apk")) {
+                            if (equalsPackage(f.getName(), packageName)) {
+                                for (PackageInfo p : packages) {
+                                    if (p.applicationInfo.sourceDir.equals(filename)) {
+                                        exec.packages.add(new PackageInfoEx(pm, p));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (partition.equals(PARTITION_DATA)) {
+                        // need to read packages from a root shell
+                        errorCode = exec.run("busybox ls " + getPartitionPath(partition) + "/app");
+                        // TODO: do it!
+                    }
                 }
             }
-            return output;
+            return errorCode;
         }
 
-        private static ArrayList<TrashPackageInfo> getPackagesFromTrash(int flags) {
-            ArrayList<TrashPackageInfo> output = new ArrayList<TrashPackageInfo>();
-            File root = new File(getPartitionPath(PARTITION_TRASH) + "/app/");
+        public static int getPackagesFromPartition(ShellExec exec, String partition, int flags) {
+            // TODO: merge with getPackageFromPartition
+            int errorCode = ErrorCode.NONE;
+            File root = new File(getPartitionPath(partition) + "/app/");
             File[] files = root.listFiles();
             if (files != null) {
                 for (File f : files) {
                     String filename = f.getPath();
                     if (filename.endsWith(".metadata")) {
-                        TrashPackageInfo info = TrashPackageInfo.get(filename, flags);
-                        output.add(info);
+                        PackageInfoEx info = PackageInfoEx.readMetaFile(filename, flags);
+                        exec.packages.add(info);
                     }
                 }
             }
-            return output;
+            return errorCode;
         }
 
         public static int wipePackages(ShellExec exec, List<String> packages, String partition, int flags) {
