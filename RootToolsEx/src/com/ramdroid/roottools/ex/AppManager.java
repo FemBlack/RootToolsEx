@@ -259,15 +259,23 @@ public class AppManager {
      * the list of installed packages directly from the file system and add more information from PackageManager when
      * available.
      *
+     * @param context The application's context
      * @param partition The partition of interest
      * @param flags Additional flags
      * @param listener returns the error code when job is finished
      */
-    public static void getPackagesFromPartition(String partition, int flags, ErrorCode.OutputListenerWithPackages listener) {
+    public static void getPackagesFromPartition(Context context, String partition, int flags, ErrorCode.OutputListenerWithPackages listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_GETPACKAGES,
+                context,
                 partition,
                 listener).execute(flags);
+    }
+
+    public static PackageInfoEx getPackageFromPartition(String partition, String packageName, int flags) {
+        ShellExec exec = new ShellExec(false);
+        Internal.getPackagesFromPartition(exec, null, partition, packageName, flags);
+        return exec.packages.get(0);
     }
 
     /**
@@ -279,7 +287,7 @@ public class AppManager {
      */
     public static PackageInfoEx getPackageFromTrash(String packageName, int flags) {
         ShellExec exec = new ShellExec(false);
-        Internal.getPackageFromPartition(exec, null, PARTITION_TRASH, packageName, flags);
+        Internal.getPackagesFromPartition(exec, null, PARTITION_TRASH, packageName, flags);
         return exec.packages.get(0);
     }
 
@@ -291,7 +299,7 @@ public class AppManager {
      */
     public static ArrayList<PackageInfoEx> getPackagesFromTrash(int flags) {
         ShellExec exec = new ShellExec(false);
-        Internal.getPackagesFromPartition(null, PARTITION_TRASH, flags);
+        Internal.getPackagesFromPartition(exec, null, PARTITION_TRASH, null, flags);
         return exec.packages;
     }
 
@@ -793,7 +801,7 @@ public class AppManager {
             return errorCode;
         }
 
-        public static int getPackageFromPartition(ShellExec exec, Context context, String partition, String packageName, int flags) {
+        public static int getPackagesFromPartition(ShellExec exec, Context context, String partition, String packageName, int flags) {
             int errorCode = ErrorCode.NONE;
 
             // TODO: create new function to find the PackgeInfo for each filename with the list of files for input
@@ -805,52 +813,52 @@ public class AppManager {
                 packages = pm.getInstalledPackages(0);
             }
 
-            File root = new File(getPartitionPath(partition) + "/app/");
-            File[] files = root.listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    String filename = f.getPath();
-                    if (partition.equals(PARTITION_TRASH)) {
-                        // need to read package info from meta file
-                        if (filename.endsWith(".metadata")) {
-                            if (equalsFilename(f.getName(), packageName, ".metadata")) {
-                                exec.packages.add(PackageInfoEx.readMetaFile(filename, flags));
-                                break;
-                            }
-                        }
-                    }
-                    else if (partition.equals(PARTITION_SYSTEM)) {
+            if (partition.equals(PARTITION_DATA)) {
+                // need to read packages from a root shell
+                errorCode = exec.run("busybox ls " + getPartitionPath(partition) + "/app");
+                if (errorCode == ErrorCode.NONE) {
+                    for (String filename : exec.output) {
                         if (filename.endsWith(".apk")) {
-                            if (equalsPackage(f.getName(), packageName)) {
+                            if (packageName == null ||
+                                    (packageName != null && equalsPackage(filename, packageName))) {
                                 for (PackageInfo p : packages) {
-                                    if (p.applicationInfo.sourceDir.equals(filename)) {
+                                    if (equalsPackage(filename, p.packageName)) {
                                         exec.packages.add(new PackageInfoEx(pm, p));
                                     }
                                 }
                             }
                         }
                     }
-                    else if (partition.equals(PARTITION_DATA)) {
-                        // need to read packages from a root shell
-                        errorCode = exec.run("busybox ls " + getPartitionPath(partition) + "/app");
-                        // TODO: do it!
-                    }
                 }
             }
-            return errorCode;
-        }
-
-        public static int getPackagesFromPartition(ShellExec exec, String partition, int flags) {
-            // TODO: merge with getPackageFromPartition
-            int errorCode = ErrorCode.NONE;
-            File root = new File(getPartitionPath(partition) + "/app/");
-            File[] files = root.listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    String filename = f.getPath();
-                    if (filename.endsWith(".metadata")) {
-                        PackageInfoEx info = PackageInfoEx.readMetaFile(filename, flags);
-                        exec.packages.add(info);
+            else {
+                File root = new File(getPartitionPath(partition) + "/app/");
+                File[] files = root.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        String filename = f.getPath();
+                        if (partition.equals(PARTITION_TRASH)) {
+                            // need to read package info from meta file
+                            if (filename.endsWith(".metadata")) {
+                                if (packageName == null ||
+                                        (packageName != null && equalsFilename(f.getName(), packageName, ".metadata"))) {
+                                    exec.packages.add(PackageInfoEx.readMetaFile(filename, flags));
+                                    break;
+                                }
+                            }
+                        }
+                        else if (partition.equals(PARTITION_SYSTEM)) {
+                            if (filename.endsWith(".apk")) {
+                                if (packageName == null ||
+                                        (packageName != null && equalsPackage(f.getName(), packageName))) {
+                                    for (PackageInfo p : packages) {
+                                        if (p.applicationInfo.sourceDir.equals(filename)) {
+                                            exec.packages.add(new PackageInfoEx(pm, p));
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -150,7 +150,7 @@ class ShellExec {
             errorCode = AppManager.Internal.wipePackages(this, params.packages, params.partition, flags[0]);
         }
         else if (api == API_EX_GETPACKAGES) {
-            errorCode = AppManager.Internal.getPackagesFromPartition(this, params.partition, flags[0]);
+            errorCode = AppManager.Internal.getPackagesFromPartition(this, params.context, params.partition, null, flags[0]);
         }
         clear();
         return errorCode;
@@ -256,11 +256,11 @@ class ShellExec {
             params.timeout = 0;
         }
 
-        public Worker(int api, String partition, ErrorCode.OutputListenerWithPackages listener) {
+        public Worker(int api, Context context, String partition, ErrorCode.OutputListenerWithPackages listener) {
             this.api = api;
             this.useRoot = true;
             this.listenerEx = listener;
-            params.context = null;
+            params.context = context;
             params.partition = partition;
             params.timeout = 0;
         }
