@@ -55,8 +55,9 @@ public class AppManager {
     public static final int FLAG_WIPEDATA       = 0x0010;
     public static final int FLAG_WIPECACHE      = 0x0020;
 
-    // Flags for reading from trash
+    // Flags for reading package information
     public static final int FLAG_METADATA       = 0x0100;
+    public static final int FLAG_LAUNCHABLE     = 0x0200;
 
     /**
      * Check if an app is installed on a particular partition or not.
@@ -272,10 +273,22 @@ public class AppManager {
                 listener).execute(flags);
     }
 
+    /**
+     * When relying on PackageManager to retrieve the list of installed apps on system or data partition then we
+     * get only the packages that were available at boot, or installed by Android's common install methods. However
+     * if we manually move apps between partitions then PackageManager is not up-to-date anymore. Therefore we parse
+     * the list of installed packages directly from the file system and add more information from PackageManager when
+     * available.
+     *
+     * @param partition The partition of interest
+     * @param packageName The package we want
+     * @param flags Additional flags
+     * @return the package information or null if not found
+     */
     public static PackageInfoEx getPackageFromPartition(String partition, String packageName, int flags) {
         ShellExec exec = new ShellExec(false);
         Internal.getPackagesFromPartition(exec, null, partition, packageName, flags);
-        return exec.packages.get(0);
+        return exec.packages.size() > 0 ? exec.packages.get(0) : null;
     }
 
     /**
@@ -283,12 +296,12 @@ public class AppManager {
      *
      * @param packageName The package name.
      * @param flags Additional flags e.g. FLAG_METADATA
-     * @return the package information
+     * @return the package information or null if not found
      */
     public static PackageInfoEx getPackageFromTrash(String packageName, int flags) {
         ShellExec exec = new ShellExec(false);
         Internal.getPackagesFromPartition(exec, null, PARTITION_TRASH, packageName, flags);
-        return exec.packages.get(0);
+        return exec.packages.size() > 0 ? exec.packages.get(0) : null;
     }
 
     /**
@@ -349,18 +362,21 @@ public class AppManager {
         private String partition;
         private String label;
         private Bitmap icon;
+        private boolean launchable;
 
         public PackageInfoEx() {
             filename = "";
             packageName = "";
             partition = "";
             label = "";
+            launchable = false;
         }
 
         public PackageInfoEx(PackageManager pm, PackageInfo packageInfo) {
             filename = packageInfo.applicationInfo.sourceDir;
             packageName = packageInfo.packageName;
             label = pm.getApplicationLabel(packageInfo.applicationInfo).toString();
+            launchable = (pm.getLaunchIntentForPackage(packageName) != null);
 
             if (filename.contains(PARTITION_SYSTEM)) {
                 partition = PARTITION_SYSTEM;
@@ -403,11 +419,19 @@ public class AppManager {
             return icon;
         }
 
+        /**
+         * @return The package can be launched?
+         */
+        public boolean isLaunchable() {
+            return launchable;
+        }
+
         private PackageInfoEx(String filename) {
             this.filename = filename;
             this.packageName = "";
             this.partition = "";
             this.label = "";
+            this.launchable = false;
         }
 
         /**
@@ -804,8 +828,6 @@ public class AppManager {
         public static int getPackagesFromPartition(ShellExec exec, Context context, String partition, String packageName, int flags) {
             int errorCode = ErrorCode.NONE;
 
-            // TODO: create new function to find the PackgeInfo for each filename with the list of files for input
-
             PackageManager pm = null;
             List<PackageInfo> packages = null;
             if (!partition.equals(PARTITION_TRASH)) {
@@ -862,6 +884,21 @@ public class AppManager {
                     }
                 }
             }
+
+            // filter out packages that can't be launched?
+            if ((flags & FLAG_LAUNCHABLE) > 0) {
+                int i = 0;
+                while (i < exec.packages.size()) {
+                    PackageInfoEx p = exec.packages.get(i);
+                    if (!p.isLaunchable()) {
+                        exec.packages.remove(i);
+                    }
+                    else {
+                        i += 1;
+                    }
+                }
+            }
+
             return errorCode;
         }
 
