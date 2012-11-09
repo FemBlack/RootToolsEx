@@ -58,6 +58,7 @@ public class AppManager {
     // Flags for reading package information
     public static final int FLAG_METADATA       = 0x0100;
     public static final int FLAG_LAUNCHABLE     = 0x0200;
+    public static final int FLAG_IGNORE_ODEXED  = 0x0400;
 
     /**
      * Check if an app is installed on a particular partition or not.
@@ -254,6 +255,8 @@ public class AppManager {
     }
 
     /**
+     * Get the list of packages of a specified partition.
+     *
      * When relying on PackageManager to retrieve the list of installed apps on system or data partition then we
      * get only the packages that were available at boot, or installed by Android's common install methods. However
      * if we manually move apps between partitions then PackageManager is not up-to-date anymore. Therefore we parse
@@ -274,21 +277,31 @@ public class AppManager {
     }
 
     /**
+     * Get package information for one package from a specified partition.
+     *
      * When relying on PackageManager to retrieve the list of installed apps on system or data partition then we
      * get only the packages that were available at boot, or installed by Android's common install methods. However
      * if we manually move apps between partitions then PackageManager is not up-to-date anymore. Therefore we parse
      * the list of installed packages directly from the file system and add more information from PackageManager when
      * available.
      *
+     * @param context The application's context
      * @param partition The partition of interest
      * @param packageName The package we want
      * @param flags Additional flags
-     * @return the package information or null if not found
+     * @param listener returns the error code when job is finished
      */
-    public static PackageInfoEx getPackageFromPartition(String partition, String packageName, int flags) {
-        ShellExec exec = new ShellExec(false);
-        Internal.getPackagesFromPartition(exec, null, partition, packageName, flags);
-        return exec.packages.size() > 0 ? exec.packages.get(0) : null;
+    public static void getPackageFromPartition(Context context, String partition, String packageName, int flags, ErrorCode.OutputListenerWithPackages listener) {
+        List<String> packages = new ArrayList<String>();
+        packages.add(packageName);
+
+        new ShellExec.Worker(
+                ShellExec.API_EX_GETPACKAGES,
+                context,
+                packages,
+                partition,
+                listener).execute(flags);
+
     }
 
     /**
@@ -792,6 +805,15 @@ public class AppManager {
                                 errorCode = exec.run(shellCmd);
                             }
                             if (errorCode == ErrorCode.NONE) {
+
+                                if (sourcePartition.equals(PARTITION_TRASH)) {
+                                    // don't forget to delete metafile
+                                    File metafile = new File(sourcePath.replace(".apk", ".metadata"));
+                                    if (metafile.exists()) {
+                                        metafile.delete();
+                                    }
+                                }
+
                                 // move odex files to trash
                                 if (isOdexed && (
                                         targetPartition.equals(PARTITION_TRASH) ||
@@ -871,12 +893,27 @@ public class AppManager {
                         }
                         else if (partition.equals(PARTITION_SYSTEM)) {
                             if (filename.endsWith(".apk")) {
+                                if ((flags & FLAG_IGNORE_ODEXED) > 0) {
+                                    // skip odexed packages
+                                    String odexFilename = filename.replace(".apk", ".odex");
+                                    if (new File(odexFilename).exists()) {
+                                        continue;
+                                    }
+                                }
                                 if (packageName == null ||
                                         (packageName != null && equalsPackage(f.getName(), packageName))) {
+                                    boolean foundPackageInfo = false;
                                     for (PackageInfo p : packages) {
                                         if (p.applicationInfo.sourceDir.equals(filename)) {
                                             exec.packages.add(new PackageInfoEx(pm, p));
+                                            foundPackageInfo = true;
                                         }
+                                    }
+                                    if (!foundPackageInfo) {
+                                        // TODO: System apps which have been updated on the data partition can't
+                                        // TODO: be found with Package manager. Same applies to apps that have been
+                                        // TODO: moved from trash, without rebooting. Find a way to fix this ;)
+                                        exec.packages.add(new PackageInfoEx(filename));
                                     }
                                 }
                             }
