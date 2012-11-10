@@ -73,11 +73,11 @@ public class AppManager {
      * @param partition PARTITION_DATA or PARTITION_SYSTEM
      * @param listener returns the error code when job is finished
      */
-    public static void appExistsOnPartition(String packageName, String partition, ErrorCode.OutputListener listener) {
+    public static void appExistsOnPartition(Context context, String packageName, String partition, ErrorCode.OutputListener listener) {
 
         // do a quick search if we don't need a root shell
         if (partition.equals(PARTITION_SYSTEM)) {
-            int errorCode = Internal.appExistsOnPartition(null, packageName, partition);
+            int errorCode = Internal.appExistsOnPartition(null, context, packageName, partition);
             listener.onResult(errorCode, new ArrayList<String>());
         }
         else {
@@ -598,28 +598,45 @@ public class AppManager {
             }
         }
 
-        public static int appExistsOnPartition(ShellExec exec, String packageName, String partition) {
-            ResultSet result = getPackageFilename(exec, packageName, partition);
+        public static int appExistsOnPartition(ShellExec exec, Context context, String packageName, String partition) {
+            ResultSet result = getPackageFilename(exec, context, packageName, partition);
             return result.errorCode;
         }
 
-        private static ResultSet getPackageFilename(ShellExec exec, String packageName, String partition) {
+        private static ResultSet getPackageFilename(ShellExec exec, Context context, String packageName, String partition) {
             ResultSet result = new ResultSet();
-            if (!partition.equals(PARTITION_DATA)) {
-                File root = new File(getPartitionPath(partition) + "/app/");
-                File[] files = root.listFiles();
-                if (files != null) {
-                    for (File f : files) {
-                        if (equalsPackage(f.getName(), packageName)) {
-                            result.errorCode = ErrorCode.NONE;
-                            result.filename = f.getPath();
-                            break;
+
+            // first try to consult package manager
+            PackageManager pm = context.getPackageManager();
+            try {
+                ApplicationInfo ai = pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA);
+                boolean found = (ai.sourceDir.startsWith(getPartitionPath(partition)));
+                if (found) {
+                    result.errorCode = ErrorCode.NONE;
+                    result.filename = ai.sourceDir;
+                }
+            }
+            catch (PackageManager.NameNotFoundException e) {
+            }
+
+            if (result.errorCode != ErrorCode.NONE) {
+                // search manually
+                if (!partition.equals(PARTITION_DATA)) {
+                    File root = new File(getPartitionPath(partition) + "/app/");
+                    File[] files = root.listFiles();
+                    if (files != null) {
+                        for (File f : files) {
+                            if (equalsPackage(f.getName(), packageName)) {
+                                result.errorCode = ErrorCode.NONE;
+                                result.filename = f.getPath();
+                                break;
+                            }
                         }
                     }
                 }
-            }
-            else {
-                result = Internal.getPackageFilenameWithRoot(exec, packageName, partition);
+                else {
+                    result = Internal.getPackageFilenameWithRoot(exec, packageName, partition);
+                }
             }
             return result;
         }
@@ -673,12 +690,12 @@ public class AppManager {
             return found;
         }
 
-        public static int appFitsOnPartition(ShellExec exec, String packageName, String partition) {
+        public static int appFitsOnPartition(ShellExec exec, Context context, String packageName, String partition) {
             String source = null;
             String[] partitions = { PARTITION_DATA, PARTITION_SYSTEM, PARTITION_TRASH };
             for (String p : partitions) {
                 if (!partition.equals(p)) {
-                    if (appExistsOnPartition(exec, packageName, p) == ErrorCode.NONE) {
+                    if (appExistsOnPartition(exec, context, packageName, p) == ErrorCode.NONE) {
                         source = p;
                         break;
                     }
@@ -686,17 +703,17 @@ public class AppManager {
             }
 
             if (source != null) {
-                ResultSet result = packageFitsOnPartition(exec, packageName, source, partition);
+                ResultSet result = packageFitsOnPartition(exec, context, packageName, source, partition);
                 return result.errorCode;
             }
             else return ErrorCode.ALREADY_EXISTING;
         }
 
-        private static ResultSet packageFitsOnPartition(ShellExec exec, String packageName, String source, String target) {
+        private static ResultSet packageFitsOnPartition(ShellExec exec, Context context, String packageName, String source, String target) {
 
             // get required disk space for APK
             long apkSpace = 0;
-            ResultSet result = getPackageFilename(exec, packageName, source);
+            ResultSet result = getPackageFilename(exec, context, packageName, source);
             if (result.errorCode == ErrorCode.NONE) {
                 apkSpace = new File(result.filename).length();
                 Log.d(TAG, "Found " + result.filename + " --> required disk space: " + apkSpace + " bytes");
@@ -737,7 +754,7 @@ public class AppManager {
             // check disk space
             HashMap<String, String> table = new HashMap<String, String>();
             for (String packageName : packages) {
-                ResultSet result = packageFitsOnPartition(exec, packageName, sourcePartition, targetPartition);
+                ResultSet result = packageFitsOnPartition(exec, context, packageName, sourcePartition, targetPartition);
                 if (result.errorCode != ErrorCode.NONE) {
                     errorCode = result.errorCode;
                     break;
@@ -776,13 +793,16 @@ public class AppManager {
                         if (sourcePath == null) {
                             errorCode = ErrorCode.INTERNAL;
                         }
-                        // is this app odexed?
+
                         boolean isOdexed = new File(sourcePath.replace(".apk", ".odex")).exists();
-                        if (isOdexed && (
-                                !targetPartition.equals(PARTITION_TRASH) ||
-                                !sourcePartition.equals(PARTITION_TRASH))
-                                ) {
-                            errorCode = ErrorCode.ODEX_NOT_SUPPORTED;
+                        if (targetPartition.equals(PARTITION_DATA)) {
+                            // don't allow to move odex apps to data partition
+                            if (isOdexed && (
+                                    !targetPartition.equals(PARTITION_TRASH) ||
+                                    !sourcePartition.equals(PARTITION_TRASH))
+                                    ) {
+                                errorCode = ErrorCode.ODEX_NOT_SUPPORTED;
+                            }
                         }
 
                         if (errorCode == ErrorCode.NONE) {
@@ -798,7 +818,7 @@ public class AppManager {
                             // prepare move command
                             String shellCmd = "busybox mv " + sourcePath + " " + targetPath;
                             if ((flags & FLAG_OVERWRITE) != FLAG_OVERWRITE) {
-                                errorCode = appExistsOnPartition(exec, packageName, targetPartition);
+                                errorCode = appExistsOnPartition(exec, context, packageName, targetPartition);
                                 if (errorCode == ErrorCode.NONE) {
                                     // App is already existing in target partition, so just remove it from source partition
                                     shellCmd = "busybox rm " + sourcePath;
@@ -891,7 +911,9 @@ public class AppManager {
                                 if (packageName == null ||
                                         (packageName != null && equalsFilename(f.getName(), packageName, ".metadata"))) {
                                     exec.packages.add(PackageInfoEx.readMetaFile(filename, flags));
-                                    break;
+                                    if (packageName != null) {
+                                        break;
+                                    }
                                 }
                             }
                         }

@@ -132,10 +132,10 @@ class ShellExec {
             errorCode = run(params.timeout, params.commands);
         }
         else if (api == API_EX_APPEXISTSONPARTITION) {
-            errorCode = AppManager.Internal.appExistsOnPartition(this, params.packages.get(0), params.partition);
+            errorCode = AppManager.Internal.appExistsOnPartition(this, params.context, params.packages.get(0), params.partition);
         }
         else if (api == API_EX_APPFITSONPARTITION) {
-            errorCode = AppManager.Internal.appFitsOnPartition(this, params.packages.get(0), params.partition);
+            errorCode = AppManager.Internal.appFitsOnPartition(this, params.context, params.packages.get(0), params.partition);
         }
         else if (api == API_EX_MOVEAPPEX) {
             errorCode = AppManager.Internal.moveAppEx(
