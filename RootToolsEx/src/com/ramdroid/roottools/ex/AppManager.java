@@ -385,16 +385,23 @@ public class AppManager {
             launchable = false;
         }
 
-        public PackageInfoEx(PackageManager pm, PackageInfo packageInfo) {
-            filename = packageInfo.applicationInfo.sourceDir;
-            packageName = packageInfo.packageName;
-            label = pm.getApplicationLabel(packageInfo.applicationInfo).toString();
-            launchable = (pm.getLaunchIntentForPackage(packageName) != null);
+        public PackageInfoEx(PackageManager pm, String filename) {
+            PackageInfo packageInfo = pm.getPackageArchiveInfo(filename, 0);
+            try {
+                ApplicationInfo ai = pm.getApplicationInfo(packageInfo.packageName, PackageManager.GET_META_DATA);
+                this.label = pm.getApplicationLabel(ai).toString();
+            }
+            catch (PackageManager.NameNotFoundException e) {
+                this.label = packageInfo.packageName;
+            }
+            this.filename = filename;
+            this.packageName = packageInfo.packageName;
+            this.launchable = (pm.getLaunchIntentForPackage(packageName) != null);
 
             if (filename.contains(PARTITION_SYSTEM)) {
-                partition = PARTITION_SYSTEM;
+                this.partition = PARTITION_SYSTEM;
             }
-            else partition = PARTITION_DATA;
+            else this.partition = PARTITION_DATA;
         }
 
         /**
@@ -865,11 +872,8 @@ public class AppManager {
                         if (filename.endsWith(".apk")) {
                             if (packageName == null ||
                                     (packageName != null && equalsPackage(filename, packageName))) {
-                                for (PackageInfo p : packages) {
-                                    if (equalsPackage(filename, p.packageName)) {
-                                        exec.packages.add(new PackageInfoEx(pm, p));
-                                    }
-                                }
+                                exec.packages.add(new PackageInfoEx(pm,
+                                        getPartitionPath(PARTITION_DATA) + "/app/" + filename));
                             }
                         }
                     }
@@ -902,19 +906,7 @@ public class AppManager {
                                 }
                                 if (packageName == null ||
                                         (packageName != null && equalsPackage(f.getName(), packageName))) {
-                                    boolean foundPackageInfo = false;
-                                    for (PackageInfo p : packages) {
-                                        if (p.applicationInfo.sourceDir.equals(filename)) {
-                                            exec.packages.add(new PackageInfoEx(pm, p));
-                                            foundPackageInfo = true;
-                                        }
-                                    }
-                                    if (!foundPackageInfo) {
-                                        // TODO: System apps which have been updated on the data partition can't
-                                        // TODO: be found with Package manager. Same applies to apps that have been
-                                        // TODO: moved from trash, without rebooting. Find a way to fix this ;)
-                                        exec.packages.add(new PackageInfoEx(filename));
-                                    }
+                                    exec.packages.add(new PackageInfoEx(pm, filename));
                                 }
                             }
                         }
