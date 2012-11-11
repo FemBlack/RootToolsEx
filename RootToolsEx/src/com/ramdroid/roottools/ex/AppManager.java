@@ -60,6 +60,21 @@ public class AppManager {
     public static final int FLAG_LAUNCHABLE     = 0x0200;
     public static final int FLAG_IGNORE_ODEXED  = 0x0400;
 
+    public static AppManager create(Context context) {
+        return new AppManager(context);
+    }
+
+    public void destroy() {
+        ShellService.stop(mContext);
+    }
+
+    private AppManager(Context context) {
+        mContext = context;
+        ShellService.start(context, true);
+    }
+
+    private Context mContext;
+
     /**
      * Check if an app is installed on a particular partition or not.
      *
@@ -73,11 +88,11 @@ public class AppManager {
      * @param partition PARTITION_DATA or PARTITION_SYSTEM
      * @param listener returns the error code when job is finished
      */
-    public static void appExistsOnPartition(Context context, String packageName, String partition, ErrorCode.OutputListener listener) {
+    public void appExistsOnPartition(String packageName, String partition, ErrorCode.OutputListener listener) {
 
         // do a quick search if we don't need a root shell
         if (partition.equals(PARTITION_SYSTEM)) {
-            int errorCode = Internal.appExistsOnPartition(null, context, packageName, partition);
+            int errorCode = Internal.appExistsOnPartition(null, mContext, packageName, partition);
             listener.onResult(errorCode, new ArrayList<String>());
         }
         else {
@@ -97,7 +112,7 @@ public class AppManager {
      * @param partition PARTITION_DATA or PARTITION_SYSTEM
      * @param listener returns the error code when job is finished
      */
-    public static void appFitsOnPartition(String packageName, String partition, ErrorCode.OutputListener listener) {
+    public void appFitsOnPartition(String packageName, String partition, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_APPFITSONPARTITION,
                 packageName,
@@ -112,7 +127,7 @@ public class AppManager {
      * @param packageName Package name of the App e.g. com.example.myapp
      * @param listener returns the error code when job is finished
      */
-    public static void installSystemApp(String packageName, ErrorCode.OutputListener listener) {
+    public void installSystemApp(String packageName, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
@@ -129,7 +144,7 @@ public class AppManager {
      * @param addFlags use additional flags e.g. FLAG_REBOOT
      * @param listener returns the error code when job is finished
      */
-    public static void installSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
+    public void installSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
@@ -145,7 +160,7 @@ public class AppManager {
      * @param packageName Package name of the App e.g. com.example.myapp
      * @param listener returns the error code when job is finished
      */
-    public static void uninstallSystemApp(String packageName, ErrorCode.OutputListener listener) {
+    public void uninstallSystemApp(String packageName, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
@@ -162,7 +177,7 @@ public class AppManager {
      * @param addFlags use additional flags e.g. FLAG_REBOOT
      * @param listener returns the error code when job is finished
      */
-    public static void uninstallSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
+    public void uninstallSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
@@ -185,7 +200,7 @@ public class AppManager {
      * @param flags Additional flags
      * @param listener listener returns the error code when job is finished
      */
-    public static void moveAppEx(String packageName, String partition, String target, int flags, ErrorCode.OutputListener listener) {
+    public void moveAppEx(String packageName, String partition, String target, int flags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packageName,
@@ -208,7 +223,7 @@ public class AppManager {
      * @param flags Additional flags
      * @param listener returns the error code when job is finished
      */
-    public static void moveAppEx(List<String> packages, String partition, String target, int flags, ErrorCode.OutputListener listener) {
+    public void moveAppEx(List<String> packages, String partition, String target, int flags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
                 packages,
@@ -220,15 +235,14 @@ public class AppManager {
     /**
      * Moves a couple of packages to trash and generates a metafile containing the application icon.
      *
-     * @param context The application context is needed for accessing package manager
      * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
      * @param partition Source partition
      * @param listener returns the error code when job is finished
      */
-    public static void moveAppToTrash(Context context, List<String> packages, String partition, ErrorCode.OutputListener listener) {
+    public void moveAppToTrash(List<String> packages, String partition, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
-                context,
+                mContext,
                 packages,
                 partition,
                 PARTITION_TRASH,
@@ -238,16 +252,15 @@ public class AppManager {
     /**
      * Moves a couple of packages to trash and generates a metafile containing the application icon.
      *
-     * @param context The application context is needed for accessing package manager
      * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
      * @param partition Source partition
      * @param flags Additional flags
      * @param listener returns the error code when job is finished
      */
-    public static void moveAppToTrashEx(Context context, List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
+    public void moveAppToTrashEx(List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_MOVEAPPEX,
-                context,
+                mContext,
                 packages,
                 partition,
                 PARTITION_TRASH,
@@ -263,15 +276,14 @@ public class AppManager {
      * the list of installed packages directly from the file system and add more information from PackageManager when
      * available.
      *
-     * @param context The application's context
      * @param partition The partition of interest
      * @param flags Additional flags
      * @param listener returns the error code when job is finished
      */
-    public static void getPackagesFromPartition(Context context, String partition, int flags, ErrorCode.OutputListenerWithPackages listener) {
+    public void getPackagesFromPartition(String partition, int flags, ErrorCode.OutputListenerWithPackages listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_GETPACKAGES,
-                context,
+                mContext,
                 partition,
                 listener).execute(flags);
     }
@@ -285,19 +297,18 @@ public class AppManager {
      * the list of installed packages directly from the file system and add more information from PackageManager when
      * available.
      *
-     * @param context The application's context
      * @param partition The partition of interest
      * @param packageName The package we want
      * @param flags Additional flags
      * @param listener returns the error code when job is finished
      */
-    public static void getPackageFromPartition(Context context, String partition, String packageName, int flags, ErrorCode.OutputListenerWithPackages listener) {
+    public void getPackageFromPartition(String partition, String packageName, int flags, ErrorCode.OutputListenerWithPackages listener) {
         List<String> packages = new ArrayList<String>();
         packages.add(packageName);
 
         new ShellExec.Worker(
                 ShellExec.API_EX_GETPACKAGES,
-                context,
+                mContext,
                 packages,
                 partition,
                 listener).execute(flags);
@@ -311,7 +322,7 @@ public class AppManager {
      * @param flags Additional flags e.g. FLAG_METADATA
      * @return the package information or null if not found
      */
-    public static PackageInfoEx getPackageFromTrash(String packageName, int flags) {
+    public PackageInfoEx getPackageFromTrash(String packageName, int flags) {
         ShellExec exec = new ShellExec(false);
         Internal.getPackagesFromPartition(exec, null, PARTITION_TRASH, packageName, flags);
         return exec.packages.size() > 0 ? exec.packages.get(0) : null;
@@ -323,7 +334,7 @@ public class AppManager {
      * @param flags Additional flags e.g. FLAG_METADATA
      * @return the list of package information records
      */
-    public static ArrayList<PackageInfoEx> getPackagesFromTrash(int flags) {
+    public ArrayList<PackageInfoEx> getPackagesFromTrash(int flags) {
         ShellExec exec = new ShellExec(false);
         Internal.getPackagesFromPartition(exec, null, PARTITION_TRASH, null, flags);
         return exec.packages;
@@ -335,7 +346,7 @@ public class AppManager {
      * @param packages List of package names e.g. com.example.myapp, com.example.myapps2, ...
      * @param listener returns the error code when job is finished
      */
-    public static void wipePackageFromTrash(List<String> packages, ErrorCode.OutputListener listener) {
+    public void wipePackageFromTrash(List<String> packages, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_WIPEAPP,
                 packages,
@@ -351,7 +362,7 @@ public class AppManager {
      * @param flags Additional flags
      * @param listener returns the error code when job is finished
      */
-    public static void wipePackageFromPartitionEx(List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
+    public void wipePackageFromPartitionEx(List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
         new ShellExec.Worker(
                 ShellExec.API_EX_WIPEAPP,
                 packages,

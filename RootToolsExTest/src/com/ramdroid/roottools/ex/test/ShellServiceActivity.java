@@ -15,7 +15,7 @@ import java.util.List;
 
 public class ShellServiceActivity extends Activity {
 
-    private Handler handler = new Handler();
+    private Handler mHandler = new Handler();
 
     /**
      * Called when the activity is first created.
@@ -30,22 +30,7 @@ public class ShellServiceActivity extends Activity {
     @Override
     public void onResume() {
         super.onResume();
-        ShellService.start(this, true, new ErrorCode.OutputListenerWithId() {
-            @Override
-            public void onResult(int id, int errorCode, final List<String> output) {
-                handler.post(new Runnable() {
-
-                    @Override
-                    public void run() {
-                        String result = "";
-                        for (String s : output) {
-                            result += s + "\n";
-                        }
-                        ((TextView) findViewById(R.id.result)).setText(result);
-                    }
-                });
-            }
-        });
+        ShellService.start(this, true);
     }
 
     @Override
@@ -57,12 +42,29 @@ public class ShellServiceActivity extends Activity {
 
     public void doSomething(View v) {
         ((TextView) findViewById(R.id.result)).setText("");
-        ShellService.send(this, 42, "ls /data/data | grep com.ramdroid");
+        ShellService.send(this, "ls /data/data | grep com.ramdroid", mResultListener);
     }
 
     public void doSomeMore(View v) {
         ((TextView) findViewById(R.id.result)).setText("");
-        ShellService.send(this, 43, new CommandBuilder().add("ls /data/dalvik-cache | grep com.ramdroid"));
+        ShellService.send(this, new CommandBuilder().add("ls /data/dalvik-cache | grep com.ramdroid"), mResultListener);
     }
+
+    private ErrorCode.OutputListener mResultListener = new ErrorCode.OutputListener() {
+        @Override
+        public void onResult(int errorCode, final List<String> output) {
+            mHandler.post(new Runnable() {
+
+                @Override
+                public void run() {
+                    String result = "";
+                    for (String s : output) {
+                        result += s + "\n";
+                    }
+                    ((TextView) findViewById(R.id.result)).setText(result);
+                }
+            });
+        }
+    };
 
 }

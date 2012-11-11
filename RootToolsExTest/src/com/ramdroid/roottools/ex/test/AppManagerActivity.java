@@ -15,8 +15,9 @@ import java.util.List;
 
 public class AppManagerActivity extends Activity {
 
-    private TextView textResult;
-    private EditText editPackageName;
+    private TextView mTextResult;
+    private EditText mEditPackageName;
+    private AppManager mAppManager;
 
     /**
      * Called when the activity is first created.
@@ -25,9 +26,10 @@ public class AppManagerActivity extends Activity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.appmanager);
-        textResult = (TextView) findViewById(R.id.result);
-        editPackageName = (EditText) findViewById(R.id.packageName);
-        editPackageName.setText(getPackageName());
+        mTextResult = (TextView) findViewById(R.id.result);
+        mEditPackageName = (EditText) findViewById(R.id.packageName);
+        mEditPackageName.setText(getPackageName());
+        mAppManager = AppManager.create(this);
     }
 
     @Override
@@ -40,68 +42,74 @@ public class AppManagerActivity extends Activity {
         super.onPause();
     }
 
-    public void appExistsOnData(View v) {
-        textResult.setText("");
+    @Override
+    public void onStop() {
+        super.onStop();
+        mAppManager.destroy();
+    }
 
-        AppManager.appExistsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_DATA, new OutputListener() {
+    public void appExistsOnData(View v) {
+        mTextResult.setText("");
+
+        mAppManager.appExistsOnPartition(mEditPackageName.getText().toString(), AppManager.PARTITION_DATA, new OutputListener() {
             @Override
             public void onResult(int errorCode, List<String> output) {
-                textResult.setText("Result error code: " + errorCode);
+                mTextResult.setText("Result error code: " + errorCode);
             }
         });
     }
 
     public void appExistsOnSystem(View v) {
-        textResult.setText("");
+        mTextResult.setText("");
 
-        AppManager.appExistsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_SYSTEM, new OutputListener() {
+        mAppManager.appExistsOnPartition(mEditPackageName.getText().toString(), AppManager.PARTITION_SYSTEM, new OutputListener() {
             @Override
             public void onResult(int errorCode, List<String> output) {
-                textResult.setText("Result error code: " + errorCode);
+                mTextResult.setText("Result error code: " + errorCode);
             }
         });
     }
 
     public void appExistsInTrash(View v) {
-        textResult.setText("");
+        mTextResult.setText("");
 
-        AppManager.appExistsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_TRASH, new OutputListener() {
+        mAppManager.appExistsOnPartition(mEditPackageName.getText().toString(), AppManager.PARTITION_TRASH, new OutputListener() {
             @Override
             public void onResult(int errorCode, List<String> output) {
-                textResult.setText("Result error code: " + errorCode);
+                mTextResult.setText("Result error code: " + errorCode);
             }
         });
     }
 
     public void appFitsOnData(View v) {
-        textResult.setText("");
+        mTextResult.setText("");
 
-        AppManager.appFitsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_DATA, new OutputListener() {
+        mAppManager.appFitsOnPartition(mEditPackageName.getText().toString(), AppManager.PARTITION_DATA, new OutputListener() {
             @Override
             public void onResult(int errorCode, List<String> output) {
-                textResult.setText("Result error code: " + errorCode);
+                mTextResult.setText("Result error code: " + errorCode);
             }
         });
     }
 
     public void appFitsOnSystem(View v) {
-        textResult.setText("");
+        mTextResult.setText("");
 
-        AppManager.appFitsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_SYSTEM, new OutputListener() {
+        mAppManager.appFitsOnPartition(mEditPackageName.getText().toString(), AppManager.PARTITION_SYSTEM, new OutputListener() {
             @Override
             public void onResult(int errorCode, List<String> output) {
-                textResult.setText("Result error code: " + errorCode);
+                mTextResult.setText("Result error code: " + errorCode);
             }
         });
     }
 
     public void appFitsInTrash(View v) {
-        textResult.setText("");
+        mTextResult.setText("");
 
-        AppManager.appFitsOnPartition(editPackageName.getText().toString(), AppManager.PARTITION_TRASH, new OutputListener() {
+        mAppManager.appFitsOnPartition(mEditPackageName.getText().toString(), AppManager.PARTITION_TRASH, new OutputListener() {
             @Override
             public void onResult(int errorCode, List<String> output) {
-                textResult.setText("Result error code: " + errorCode);
+                mTextResult.setText("Result error code: " + errorCode);
             }
         });
     }

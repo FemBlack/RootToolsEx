@@ -25,6 +25,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.ResultReceiver;
 
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -40,38 +41,17 @@ public class ShellService extends Service {
     private static final String REQUEST_RECEIVER_EXTRA = "ShellServiceRequestReceiverExtra";
     private static final int RESULT_ID_QUOTE = 42;
 
-    private CommandReceiver receiver;
-    private ShellExec shellExec;
-    private ResultReceiver resultReceiver;
+    private CommandReceiver mReceiver;
+    private ShellExec mShellExec;
 
     /**
-     * Starts the {@link ShellService} and prepares the result listener.
-     *
-     * Results from commands that are send to the service later are returned to the caller
-     * in the {@link ErrorCode.OutputListener}.
-     *
-     * Please note that the result is coming from a different thread. So you have to make
-     * sure that result is send back to the UI thread, for instance by using a {@link android.os.Handler}.
+     * Initializes the {@link ShellService}.
      *
      * @param context Context of the caller.
      * @param useRoot True if you need a root shell.
-     * @param listener Returns the command result.
      */
-    public static void start(Context context, boolean useRoot, final ErrorCode.OutputListenerWithId listener) {
-        Intent i = new Intent(context, ShellService.class);
-        i.putExtra("useRoot", useRoot);
-        i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
-            @Override
-            protected void onReceiveResult(int resultCode, Bundle resultData) {
-                if (resultCode == RESULT_ID_QUOTE) {
-                    int id = resultData.getInt("id");
-                    int errorCode = resultData.getInt("errorCode");
-                    List<String> output = resultData.getStringArrayList("output");
-                    listener.onResult(id, errorCode, output);
-                }
-            }
-        });
-        context.startService(i);
+    public static void start(Context context, boolean useRoot) {
+        context.startService(new Intent(context, ShellService.class).putExtra("useRoot", useRoot));
     }
 
     /**
@@ -84,38 +64,56 @@ public class ShellService extends Service {
     }
 
     /**
-     * Sends a command to the {@link ShellService}. This is the
-     * straight-forward solution if you only need to send one
-     * simple command at a time.
+     * Sends a command to the {@link ShellService}. This is the straight-forward solution if you only need
+     * to send one simple command at a time.
+     *
+     * Please note that the result is coming from a different thread. So you have to make
+     * sure that result is send back to the UI thread, for instance by using a {@link android.os.Handler}.
      *
      * @param context Context of the caller.
-     * @param id id of the command
      * @param cmd the command to execute in the shell.
+     * @param listener Returns the command result.
      */
-    public static void send(Context context, int id, String cmd) {
-        Bundle data = new Bundle();
-        data.putInt("id", id);
-        data.putString("cmd", cmd);
+    public static void send(Context context, String cmd, final ErrorCode.OutputListener listener) {
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
-        i.putExtras(data);
+        i.putExtra("cmd", cmd);
+        i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
+            @Override
+            protected void onReceiveResult(int resultCode, Bundle resultData) {
+                if (resultCode == RESULT_ID_QUOTE) {
+                    int errorCode = resultData.getInt("errorCode");
+                    List<String> output = resultData.getStringArrayList("output");
+                    listener.onResult(errorCode, output);
+                }
+            }
+        });
         context.sendBroadcast(i);
     }
 
     /**
-     * Sends one or more commands to the {@link ShellService}.
-     * The {@link CommandBuilder} is used to construct the command.
-     * In the future this allows to use more options like e.g. timeouts.
+     * Sends one or more commands to the {@link ShellService}. The {@link CommandBuilder} is used to construct
+     * the command. In the future this allows to use more options like e.g. timeouts.
+     *
+     * Please note that the result is coming from a different thread. So you have to make
+     * sure that result is send back to the UI thread, for instance by using a {@link android.os.Handler}.
      *
      * @param context Context of the caller.
-     * @param id id of the command
      * @param builder the {@link CommandBuilder} object
+     * @param listener Returns the command result.
      */
-    public static void send(Context context, int id, CommandBuilder builder) {
-        Bundle data = new Bundle();
-        data.putInt("id", id);
-        data.putParcelable("builder", builder);
+    public static void send(Context context, CommandBuilder builder, final ErrorCode.OutputListener listener) {
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
-        i.putExtras(data);
+        i.putExtra("builder", builder);
+        i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
+            @Override
+            protected void onReceiveResult(int resultCode, Bundle resultData) {
+                if (resultCode == RESULT_ID_QUOTE) {
+                    int errorCode = resultData.getInt("errorCode");
+                    List<String> output = resultData.getStringArrayList("output");
+                    listener.onResult(errorCode, output);
+                }
+            }
+        });
         context.sendBroadcast(i);
     }
 
@@ -127,17 +125,15 @@ public class ShellService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
-        resultReceiver = intent.getParcelableExtra(REQUEST_RECEIVER_EXTRA);
-
         // init shell
         boolean useRoot = intent.getBooleanExtra("useRoot", true);
-        shellExec = new ShellExec(useRoot);
+        mShellExec = new ShellExec(useRoot);
 
         // register intent receiver
         IntentFilter filter = new IntentFilter();
         filter.addAction(ACTION_SEND_SHELL_CMD);
-        receiver = new CommandReceiver();
-        registerReceiver(receiver, filter);
+        mReceiver = new CommandReceiver();
+        registerReceiver(mReceiver, filter);
 
         return START_STICKY;
     }
@@ -145,37 +141,35 @@ public class ShellService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        unregisterReceiver(receiver);
-        shellExec.clear();
+        unregisterReceiver(mReceiver);
+        mShellExec.clear();
     }
 
     private class CommandReceiver extends BroadcastReceiver {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            final Bundle data = intent.getExtras();
-            final int id = data.getInt("id");
-            final String cmd = data.getString("cmd");
-            final CommandBuilder builder = data.getParcelable("builder");
+            final String cmd = intent.getStringExtra("cmd");
+            final CommandBuilder builder = intent.getParcelableExtra("builder");
+            final ResultReceiver resultReceiver = intent.getParcelableExtra(REQUEST_RECEIVER_EXTRA);
 
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    synchronized (shellExec) {
+                    synchronized (mShellExec) {
                         int errorCode = ErrorCode.NONE;
                         if (cmd != null) {
-                            shellExec.run(cmd);
+                            mShellExec.run(cmd);
                         }
                         else if (builder != null) {
                             String[] commands = builder.commands.toArray(new String[builder.commands.size()]);
-                            shellExec.run(builder.timeout, commands);
+                            mShellExec.run(builder.timeout, commands);
                         }
 
                         if (resultReceiver != null) {
                             Bundle resultData = new Bundle();
-                            resultData.putInt("id", id);
                             resultData.putInt("errorCode", errorCode);
-                            resultData.putStringArrayList("output", shellExec.output);
+                            resultData.putStringArrayList("output", mShellExec.output);
                             resultReceiver.send(RESULT_ID_QUOTE, resultData);
                         }
                     }
