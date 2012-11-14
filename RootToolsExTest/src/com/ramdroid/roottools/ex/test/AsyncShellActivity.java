@@ -2,14 +2,12 @@ package com.ramdroid.roottools.ex.test;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.os.Handler;
 import android.view.View;
 import android.widget.TextView;
 import com.ramdroid.roottools.ex.AsyncShell;
-import com.ramdroid.roottools.ex.CommandBuilder;
+import com.ramdroid.roottools.ex.ParamBuilder;
 import com.ramdroid.roottools.ex.ErrorCode;
 import com.ramdroid.roottools.ex.ErrorCode.OutputListener;
-import com.ramdroid.roottools.ex.ShellService;
 
 import java.util.List;
 
@@ -70,7 +68,7 @@ public class AsyncShellActivity extends Activity {
     public void doSomething(View v) {
         result.setText("");
 
-        AsyncShell.send(true, new CommandBuilder().add("ls /data/data | grep com.ramdroid"), new OutputListener() {
+        AsyncShell.send(true, "ls /data/data | grep com.ramdroid", new OutputListener() {
 
             @Override
             public void onResult(int errorCode, List<String> output) {

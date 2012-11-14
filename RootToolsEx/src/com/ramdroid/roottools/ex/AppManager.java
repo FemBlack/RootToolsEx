@@ -23,14 +23,12 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.os.Environment;
 import android.util.Log;
 
 import com.stericson.RootTools.RootTools;
 
 import java.io.*;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -97,11 +95,11 @@ public class AppManager {
         }
         else {
             // otherwise pull up a root shell in a separate thread
-            new ShellExec.Worker(
-                    ShellExec.API_EX_APPEXISTSONPARTITION,
-                    packageName,
-                    partition,
-                    listener).execute();
+            ParamBuilder params = new ParamBuilder()
+                    .addPackage(packageName)
+                    .setPartition(partition);
+
+            ShellService.send(mContext, ShellExec.API_EX_APPEXISTSONPARTITION, params, listener);
         }
     }
 
@@ -113,11 +111,11 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void appFitsOnPartition(String packageName, String partition, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_APPFITSONPARTITION,
-                packageName,
-                partition,
-                listener).execute();
+        ParamBuilder params = new ParamBuilder()
+                .addPackage(packageName)
+                .setPartition(partition);
+
+        ShellService.send(mContext, ShellExec.API_EX_APPFITSONPARTITION, params, listener);
     }
 
     /**
@@ -128,12 +126,7 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void installSystemApp(String packageName, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                packageName,
-                PARTITION_DATA,
-                PARTITION_SYSTEM,
-                listener).execute(FLAG_OVERWRITE);
+        installSystemAppEx(packageName, 0, listener);
     }
 
     /**
@@ -145,12 +138,13 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void installSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                packageName,
-                PARTITION_DATA,
-                PARTITION_SYSTEM,
-                listener).execute(FLAG_OVERWRITE | addFlags);
+        ParamBuilder params = new ParamBuilder()
+                .addPackage(packageName)
+                .setPartition(PARTITION_DATA)
+                .setTarget(PARTITION_SYSTEM)
+                .setFlags(FLAG_OVERWRITE | addFlags);
+
+        ShellService.send(mContext, ShellExec.API_EX_MOVEAPPEX, params, listener);
     }
 
     /**
@@ -161,12 +155,7 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void uninstallSystemApp(String packageName, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                packageName,
-                PARTITION_SYSTEM,
-                PARTITION_DATA,
-                listener).execute(0);
+        uninstallSystemAppEx(packageName, 0, listener);
     }
 
     /**
@@ -178,12 +167,13 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void uninstallSystemAppEx(String packageName, int addFlags, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                packageName,
-                PARTITION_SYSTEM,
-                PARTITION_DATA,
-                listener).execute(addFlags);
+        ParamBuilder params = new ParamBuilder()
+                .addPackage(packageName)
+                .setPartition(PARTITION_SYSTEM)
+                .setTarget(PARTITION_DATA)
+                .setFlags(addFlags);
+
+        ShellService.send(mContext, ShellExec.API_EX_MOVEAPPEX, params, listener);
     }
 
     /**
@@ -201,12 +191,13 @@ public class AppManager {
      * @param listener listener returns the error code when job is finished
      */
     public void moveAppEx(String packageName, String partition, String target, int flags, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                packageName,
-                partition,
-                target,
-                listener).execute(flags);
+        ParamBuilder params = new ParamBuilder()
+                .addPackage(packageName)
+                .setPartition(partition)
+                .setTarget(target)
+                .setFlags(flags);
+
+        ShellService.send(mContext, ShellExec.API_EX_MOVEAPPEX, params, listener);
     }
 
     /**
@@ -224,12 +215,13 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void moveAppEx(List<String> packages, String partition, String target, int flags, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                packages,
-                partition,
-                target,
-                listener).execute(flags);
+        ParamBuilder params = new ParamBuilder()
+                .addPackages(packages)
+                .setPartition(partition)
+                .setTarget(target)
+                .setFlags(flags);
+
+        ShellService.send(mContext, ShellExec.API_EX_MOVEAPPEX, params, listener);
     }
 
     /**
@@ -240,13 +232,7 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void moveAppToTrash(List<String> packages, String partition, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                mContext,
-                packages,
-                partition,
-                PARTITION_TRASH,
-                listener).execute(0);
+        moveAppEx(packages, partition, PARTITION_TRASH, 0, listener);
     }
 
     /**
@@ -258,13 +244,7 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void moveAppToTrashEx(List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_MOVEAPPEX,
-                mContext,
-                packages,
-                partition,
-                PARTITION_TRASH,
-                listener).execute(flags);
+        moveAppEx(packages, partition, PARTITION_TRASH, flags, listener);
     }
 
     /**
@@ -281,11 +261,11 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void getPackagesFromPartition(String partition, int flags, ErrorCode.OutputListenerWithPackages listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_GETPACKAGES,
-                mContext,
-                partition,
-                listener).execute(flags);
+        ParamBuilder params = new ParamBuilder()
+                .setPartition(partition)
+                .setFlags(flags);
+
+        ShellService.sendPackageCommand(mContext, ShellExec.API_EX_GETPACKAGES, params, listener);
     }
 
     /**
@@ -303,15 +283,12 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void getPackageFromPartition(String partition, String packageName, int flags, ErrorCode.OutputListenerWithPackages listener) {
-        List<String> packages = new ArrayList<String>();
-        packages.add(packageName);
+        ParamBuilder params = new ParamBuilder()
+                .addPackage(packageName)
+                .setPartition(partition)
+                .setFlags(flags);
 
-        new ShellExec.Worker(
-                ShellExec.API_EX_GETPACKAGES,
-                mContext,
-                packages,
-                partition,
-                listener).execute(flags);
+        ShellService.sendPackageCommand(mContext, ShellExec.API_EX_GETPACKAGES, params, listener);
 
     }
 
@@ -347,11 +324,12 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void wipePackageFromTrash(List<String> packages, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_WIPEAPP,
-                packages,
-                PARTITION_TRASH,
-                listener).execute(FLAG_WIPECACHE | FLAG_WIPEDATA);
+        ParamBuilder params = new ParamBuilder()
+                .addPackages(packages)
+                .setPartition(PARTITION_TRASH)
+                .setFlags(FLAG_WIPECACHE | FLAG_WIPEDATA);
+
+        ShellService.send(mContext, ShellExec.API_EX_WIPEAPP, params, listener);
     }
 
     /**
@@ -363,106 +341,22 @@ public class AppManager {
      * @param listener returns the error code when job is finished
      */
     public void wipePackageFromPartitionEx(List<String> packages, String partition, int flags, ErrorCode.OutputListener listener) {
-        new ShellExec.Worker(
-                ShellExec.API_EX_WIPEAPP,
-                packages,
-                partition,
-                listener).execute(0);
+        ParamBuilder params = new ParamBuilder()
+                .addPackages(packages)
+                .setPartition(partition)
+                .setFlags(flags);
+
+        ShellService.send(mContext, ShellExec.API_EX_WIPEAPP, params, listener);
     }
 
-    /**
-     * The PackageManager APIs including PackageInfo (containing the application's name and icon) obviously isn't
-     * available anymore after an app has been moved to trash. Therefore a separate file is maintained for each trashed
-     * package that contains such information.
-     *
-     * The packages can be parsed with the getPackagesFromTrash() function in {@link AppManager}.
-     */
-    public static class PackageInfoEx {
+    static class PackageMetaData extends PackageInfoEx {
 
-        private final static int VERSION = 1;
-
-        private String filename;
-        private String packageName;
-        private String partition;
-        private String label;
-        private Bitmap icon;
-        private boolean launchable;
-
-        public PackageInfoEx() {
-            filename = "";
-            packageName = "";
-            partition = "";
-            label = "";
-            launchable = false;
-        }
-
-        public PackageInfoEx(PackageManager pm, String filename) {
-            PackageInfo packageInfo = pm.getPackageArchiveInfo(filename, 0);
-            try {
-                ApplicationInfo ai = pm.getApplicationInfo(packageInfo.packageName, PackageManager.GET_META_DATA);
-                this.label = pm.getApplicationLabel(ai).toString();
-            }
-            catch (PackageManager.NameNotFoundException e) {
-                this.label = packageInfo.packageName;
-            }
-            this.filename = filename;
-            this.packageName = packageInfo.packageName;
-            this.launchable = (pm.getLaunchIntentForPackage(packageName) != null);
-
-            if (filename.contains(PARTITION_SYSTEM)) {
-                this.partition = PARTITION_SYSTEM;
-            }
-            else this.partition = PARTITION_DATA;
-        }
-
-        /**
-         * @return The full path to the APK.
-         */
-        public String getFilename() {
-            return filename;
-        }
-
-        /**
-         * @return The package name of the app.
-         */
-        public String getPackageName() {
-            return packageName;
-        }
-
-        /**
-         * @return The partition the APK was originally existing on
-         */
-        public String getPartition() {
-            return partition;
-        }
-
-        /**
-         * @return The full name of the app.
-         */
-        public String getLabel() {
-            return label;
-        }
-
-        /**
-         * @return The default icon of the app..
-         */
-        public Bitmap getIcon() {
-            return icon;
-        }
-
-        /**
-         * @return The package can be launched?
-         */
-        public boolean isLaunchable() {
-            return launchable;
-        }
-
-        private PackageInfoEx(String filename) {
-            this.filename = filename;
-            this.packageName = "";
-            this.partition = "";
-            this.label = "";
-            this.launchable = false;
+        private PackageMetaData(String filename) {
+            mFilename = filename;
+            mPackageName = "";
+            mPartition = "";
+            mLabel = "";
+            mLaunchable = false;
         }
 
         /**
@@ -481,15 +375,15 @@ public class AppManager {
             }
 
             PackageInfoEx packageInfo = new PackageInfoEx();
-            packageInfo.partition = partition;
+            packageInfo.mPartition = partition;
 
             // read application icon
             if (errorCode == ErrorCode.NONE) {
                 try {
                     PackageManager pm = context.getPackageManager();
                     ApplicationInfo ai = pm.getApplicationInfo(packageName, 0);
-                    packageInfo.label = pm.getApplicationLabel(ai).toString();
-                    packageInfo.icon = ((BitmapDrawable) pm.getApplicationIcon(packageName)).getBitmap();
+                    packageInfo.mLabel = pm.getApplicationLabel(ai).toString();
+                    packageInfo.mIcon = ((BitmapDrawable) pm.getApplicationIcon(packageName)).getBitmap();
                 } catch (PackageManager.NameNotFoundException e) {
                     errorCode = ErrorCode.NOT_EXISTING;
                 }
@@ -498,14 +392,14 @@ public class AppManager {
             // write bitmap into output file
             if (errorCode == ErrorCode.NONE) {
                 ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                packageInfo.icon.compress(Bitmap.CompressFormat.PNG, 100, stream);
+                packageInfo.mIcon.compress(Bitmap.CompressFormat.PNG, 100, stream);
 
                 OutputStream out = null;
                 try {
                     out = new BufferedOutputStream(new FileOutputStream(filename.replace(".apk", ".metadata")));
                     out.write(VERSION);
-                    out.write(packageInfo.label.length());
-                    out.write(packageInfo.label.getBytes());
+                    out.write(packageInfo.mLabel.length());
+                    out.write(packageInfo.mLabel.getBytes());
                     out.write(packageName.length());
                     out.write(packageName.getBytes());
                     out.write(partition.length());
@@ -536,7 +430,7 @@ public class AppManager {
          * @return The package info containing all details.
          */
         private static PackageInfoEx readMetaFile(String filename, int flags) {
-            PackageInfoEx packageInfo = new PackageInfoEx(filename.replace(".metadata", ".apk"));
+            PackageInfoEx packageInfo = new PackageMetaData(filename.replace(".metadata", ".apk"));
             InputStream in = null;
 
             try {
@@ -547,26 +441,26 @@ public class AppManager {
                     // read application label
                     int len = in.read();
                     for (int i=0; i<len; ++i) {
-                        packageInfo.label += (char)in.read();
+                        packageInfo.mLabel += (char)in.read();
                     }
 
                     // read package name
                     len = in.read();
                     for (int i=0; i<len; ++i) {
-                        packageInfo.packageName += (char)in.read();
+                        packageInfo.mPackageName += (char)in.read();
                     }
 
                     // read source partition
                     len = in.read();
                     for (int i=0; i<len; ++i) {
-                        packageInfo.partition += (char)in.read();
+                        packageInfo.mPartition += (char)in.read();
                     }
 
                     // read application icon
-                    if ((flags & FLAG_METADATA) > 0) {
+                    if ((flags & AppManager.FLAG_METADATA) > 0) {
                         byte[] buffer = new byte[100000];
                         len = in.read(buffer);
-                        packageInfo.icon = BitmapFactory.decodeByteArray(buffer, 0, len);
+                        packageInfo.mIcon = BitmapFactory.decodeByteArray(buffer, 0, len);
                     }
                 }
             }
@@ -823,7 +717,7 @@ public class AppManager {
 
                             if (targetPartition.equals(PARTITION_TRASH)) {
                                 // generate meta data for packages moved to trash
-                                PackageInfoEx.createMetaFile(context, packageName, targetPath, sourcePartition);
+                                PackageMetaData.createMetaFile(context, packageName, targetPath, sourcePartition);
                             }
 
                             // prepare move command
@@ -921,7 +815,7 @@ public class AppManager {
                             if (filename.endsWith(".metadata")) {
                                 if (packageName == null ||
                                         (packageName != null && equalsFilename(f.getName(), packageName, ".metadata"))) {
-                                    exec.packages.add(PackageInfoEx.readMetaFile(filename, flags));
+                                    exec.packages.add(PackageMetaData.readMetaFile(filename, flags));
                                     if (packageName != null) {
                                         break;
                                     }

@@ -25,7 +25,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.ResultReceiver;
 
-import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -43,6 +42,7 @@ public class ShellService extends Service {
 
     private CommandReceiver mReceiver;
     private ShellExec mShellExec;
+    private Context mContext;
 
     /**
      * Initializes the {@link ShellService}.
@@ -76,6 +76,7 @@ public class ShellService extends Service {
      */
     public static void send(Context context, String cmd, final ErrorCode.OutputListener listener) {
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
+        i.putExtra("api", ShellExec.API_SEND);
         i.putExtra("cmd", cmd);
         i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
             @Override
@@ -91,19 +92,21 @@ public class ShellService extends Service {
     }
 
     /**
-     * Sends one or more commands to the {@link ShellService}. The {@link CommandBuilder} is used to construct
+     * Sends one or more commands to the {@link ShellService}. The {@link ParamBuilder} is used to construct
      * the command. In the future this allows to use more options like e.g. timeouts.
      *
      * Please note that the result is coming from a different thread. So you have to make
      * sure that result is send back to the UI thread, for instance by using a {@link android.os.Handler}.
      *
      * @param context Context of the caller.
-     * @param builder the {@link CommandBuilder} object
+     * @param api The API call to send.
+     * @param params the {@link ParamBuilder} object
      * @param listener Returns the command result.
      */
-    public static void send(Context context, CommandBuilder builder, final ErrorCode.OutputListener listener) {
+    public static void send(Context context, int api, ParamBuilder params, final ErrorCode.OutputListener listener) {
         Intent i = new Intent(ACTION_SEND_SHELL_CMD);
-        i.putExtra("builder", builder);
+        i.putExtra("api", api);
+        i.putExtra("params", params);
         i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
             @Override
             protected void onReceiveResult(int resultCode, Bundle resultData) {
@@ -111,6 +114,23 @@ public class ShellService extends Service {
                     int errorCode = resultData.getInt("errorCode");
                     List<String> output = resultData.getStringArrayList("output");
                     listener.onResult(errorCode, output);
+                }
+            }
+        });
+        context.sendBroadcast(i);
+    }
+
+    public static void sendPackageCommand(Context context, int api, ParamBuilder params, final ErrorCode.OutputListenerWithPackages listener) {
+        Intent i = new Intent(ACTION_SEND_SHELL_CMD);
+        i.putExtra("api", api);
+        i.putExtra("params", params);
+        i.putExtra(REQUEST_RECEIVER_EXTRA, new ResultReceiver(null) {
+            @Override
+            protected void onReceiveResult(int resultCode, Bundle resultData) {
+                if (resultCode == RESULT_ID_QUOTE) {
+                    int errorCode = resultData.getInt("errorCode");
+                    List<PackageInfoEx> packages = resultData.getParcelableArrayList("packages");
+                    listener.onResult(errorCode, packages);
                 }
             }
         });
@@ -149,8 +169,9 @@ public class ShellService extends Service {
 
         @Override
         public void onReceive(Context context, Intent intent) {
+            final int api = intent.getIntExtra("api", ShellExec.API_SEND);
             final String cmd = intent.getStringExtra("cmd");
-            final CommandBuilder builder = intent.getParcelableExtra("builder");
+            final ParamBuilder params = intent.getParcelableExtra("params");
             final ResultReceiver resultReceiver = intent.getParcelableExtra(REQUEST_RECEIVER_EXTRA);
 
             new Thread(new Runnable() {
@@ -158,18 +179,27 @@ public class ShellService extends Service {
                 public void run() {
                     synchronized (mShellExec) {
                         int errorCode = ErrorCode.NONE;
-                        if (cmd != null) {
-                            mShellExec.run(cmd);
+                        if (api == ShellExec.API_SEND) {
+                            if (cmd != null) {
+                                mShellExec.run(cmd);
+                            }
+                            else if (params != null) {
+                                mShellExec.run(params.getTimeout(), params.getCommands());
+                            }
                         }
-                        else if (builder != null) {
-                            String[] commands = builder.commands.toArray(new String[builder.commands.size()]);
-                            mShellExec.run(builder.timeout, commands);
+                        else {
+                            mShellExec.callApi(api, params);
                         }
 
                         if (resultReceiver != null) {
                             Bundle resultData = new Bundle();
                             resultData.putInt("errorCode", errorCode);
-                            resultData.putStringArrayList("output", mShellExec.output);
+                            if (api == ShellExec.API_SEND) {
+                                resultData.putStringArrayList("output", mShellExec.output);
+                            }
+                            else {
+                                resultData.putParcelableArrayList("packages", mShellExec.packages);
+                            }
                             resultReceiver.send(RESULT_ID_QUOTE, resultData);
                         }
                     }

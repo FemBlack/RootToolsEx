@@ -79,28 +79,28 @@ public class Shell {
 
         Result result = new Result();
         ShellExec exec = new ShellExec(useRoot);
-        result.errorCode = exec.callApi(ShellExec.API_SEND, new ShellExec.Params(command));
+        result.errorCode = exec.callApi(ShellExec.API_SEND, new ParamBuilder().addCommand(command));
         result.output = exec.output;
         return result;
     }
 
     /**
      * Send one ore more commands to a shell. The list of commands is created using the
-     * {@link com.ramdroid.roottools.ex.CommandBuilder}. This way we can add more options in the future without
+     * {@link ParamBuilder}. This way we can add more options in the future without
      * the need to create dozens of different send(..) commands.
      *
      * @param useRoot true if you need a root shell
-     * @param builder the list of commands created from a  {@link com.ramdroid.roottools.ex.CommandBuilder}
+     * @param params the list of commands created from a  {@link ParamBuilder}
      * @return Returns the error code and shell output
      */
-    public static Result send(boolean useRoot, CommandBuilder builder) {
+    public static Result send(boolean useRoot, ParamBuilder params) {
         if (Looper.myLooper() != null && Looper.myLooper() == Looper.getMainLooper()) {
             throw new RuntimeException(ERR);
         }
 
         Result result = new Result();
         ShellExec exec = new ShellExec(useRoot);
-        result.errorCode = exec.callApi(ShellExec.API_SEND, new ShellExec.Params(builder));
+        result.errorCode = exec.callApi(ShellExec.API_SEND, params);
         result.output = exec.output;
         return result;
     }

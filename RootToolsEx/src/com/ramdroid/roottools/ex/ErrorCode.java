@@ -66,6 +66,6 @@ public class ErrorCode {
      * Interface to return the error code and list of requested packages.
      */
     public interface OutputListenerWithPackages {
-        void onResult(int errorCode, List<AppManager.PackageInfoEx> packages);
+        void onResult(int errorCode, List<PackageInfoEx> packages);
     }
 }

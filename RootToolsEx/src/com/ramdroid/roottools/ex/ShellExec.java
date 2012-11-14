@@ -26,7 +26,6 @@ import com.stericson.RootTools.execution.Shell;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 
@@ -51,17 +50,17 @@ class ShellExec {
     public static final int API_EX_GETPACKAGES              = 105;
 
     public ArrayList<String> output = new ArrayList<String>();
-    public ArrayList<AppManager.PackageInfoEx> packages = new ArrayList<AppManager.PackageInfoEx>();
-
-    private Shell rootShell;
-    private boolean useRoot;
-
-    private static int commandId = 0;
+    public ArrayList<PackageInfoEx> packages = new ArrayList<PackageInfoEx>();
 
     private static final String TAG = "ShellExec";
 
+    private Shell mShell;
+    private boolean mUseRoot;
+
+    private static int mCommandId = 0;
+
     public ShellExec(boolean useRoot) {
-        this.useRoot = useRoot;
+        mUseRoot = useRoot;
     }
 
     public int run(String... command) {
@@ -70,14 +69,14 @@ class ShellExec {
 
     public int run(int timeout, String... command) {
         int errorCode = ErrorCode.COMMAND_FAILED;
-        commandId += 1;
+        mCommandId += 1;
         output.clear();
-        Log.d(TAG, "Cmd " + commandId + ": " + command.toString());
-        Command cmd = new Command(commandId, command) {
+        Log.d(TAG, "Cmd " + mCommandId + ": " + command.toString());
+        Command cmd = new Command(mCommandId, command) {
 
             @Override
             public void output(int id, String line) {
-                if (id == commandId && line != null && line.length() > 0) {
+                if (id == mCommandId && line != null && line.length() > 0) {
                     Log.d(TAG, "ID " + id + ": " + line);
                     output.add(line);
                 }
@@ -85,13 +84,13 @@ class ShellExec {
         };
 
         try {
-            rootShell = RootTools.getShell(useRoot);
+            mShell = RootTools.getShell(mUseRoot);
             int exitCode;
             if (timeout > 0) {
-                exitCode = rootShell.add(cmd).exitCode(timeout);
+                exitCode = mShell.add(cmd).exitCode(timeout);
             }
             else {
-                exitCode = rootShell.add(cmd).exitCode();
+                exitCode = mShell.add(cmd).exitCode();
             }
             if (exitCode == 0) {
                 errorCode = ErrorCode.NONE;
@@ -110,7 +109,7 @@ class ShellExec {
         return errorCode;
     }
 
-    public int callApi(int api, Params params, Integer... flags) {
+    public int callApi(int api, ParamBuilder builder, Integer... flags) {
         int errorCode = ErrorCode.NONE;
         if (api == API_GOTROOT) {
             boolean gotRoot = false;
@@ -129,32 +128,51 @@ class ShellExec {
             errorCode = available ? ErrorCode.NONE : ErrorCode.BUSYBOX;
         }
         else if (api == API_SEND) {
-            errorCode = run(params.timeout, params.commands);
+            errorCode = run(builder.getTimeout(), builder.getCommands());
         }
-        else if (api == API_EX_APPEXISTSONPARTITION) {
-            errorCode = AppManager.Internal.appExistsOnPartition(this, params.context, params.packages.get(0), params.partition);
+        clear();
+        return errorCode;
+    }
+
+    public int callApi(int api, Context context, ParamBuilder builder, Integer... flags) {
+        int errorCode = ErrorCode.NONE;
+        if (api == API_EX_APPEXISTSONPARTITION) {
+            errorCode = AppManager.Internal.appExistsOnPartition(
+                    this,
+                    context,
+                    builder.getFirstPackage(),
+                    builder.getPartition());
         }
         else if (api == API_EX_APPFITSONPARTITION) {
-            errorCode = AppManager.Internal.appFitsOnPartition(this, params.context, params.packages.get(0), params.partition);
+            errorCode = AppManager.Internal.appFitsOnPartition(
+                    this,
+                    context,
+                    builder.getFirstPackage(),
+                    builder.getPartition());
         }
         else if (api == API_EX_MOVEAPPEX) {
             errorCode = AppManager.Internal.moveAppEx(
                     this,
-                    params.context,
-                    params.packages,
-                    params.partition,
-                    params.target,
+                    context,
+                    builder.getPackages(),
+                    builder.getPartition(),
+                    builder.getTarget(),
                     flags[0]);
         }
         else if (api == API_EX_WIPEAPP) {
-            errorCode = AppManager.Internal.wipePackages(this, params.packages, params.partition, flags[0]);
+            errorCode = AppManager.Internal.wipePackages(
+                    this,
+                    builder.getPackages(),
+                    builder.getPartition(),
+                    flags[0]);
         }
         else if (api == API_EX_GETPACKAGES) {
-            String packageName = null;
-            if (params.packages != null && params.packages.size() > 0) {
-                packageName = params.packages.get(0);
-            }
-            errorCode = AppManager.Internal.getPackagesFromPartition(this, params.context, params.partition, packageName, flags[0]);
+            errorCode = AppManager.Internal.getPackagesFromPartition(
+                    this,
+                    context,
+                    builder.getPartition(),
+                    builder.getFirstPackage(),
+                    flags[0]);
         }
         clear();
         return errorCode;
@@ -162,31 +180,11 @@ class ShellExec {
 
     public void clear() {
         try {
-            if (rootShell != null) {
-                rootShell.close();
+            if (mShell != null) {
+                mShell.close();
             }
         } catch (IOException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-        }
-    }
-
-    public static class Params {
-        private String[] commands;
-        private List<String> packages = new ArrayList<String>();
-        private String partition;
-        private String target;
-        private int timeout;
-        private Context context;
-
-        public Params() {
-        }
-
-        public Params(String command) {
-            this.commands = new String[] { command };
-        }
-
-        public Params(CommandBuilder builder) {
-            this.commands = builder.commands.toArray(new String[builder.commands.size()]);
         }
     }
 
@@ -195,130 +193,59 @@ class ShellExec {
      */
     public static class Worker extends AsyncTask<Integer, Void, Integer> {
 
-        private int api;
-        private ErrorCode.OutputListener listener;
-        private ErrorCode.OutputListenerWithPackages listenerEx;
-        private ShellExec exec;
-        private boolean useRoot;
-        private Params params = new Params();
+        private int mApi;
+        private ErrorCode.OutputListener mListener;
+        private ErrorCode.OutputListenerWithPackages mListenerEx;
+        private ShellExec mExec;
+        private boolean mUseRoot;
+        private ParamBuilder mBuilder = new ParamBuilder();
 
         public Worker(int api, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.listener = listener;
-            this.useRoot = true;
-            params.context = null;
-            params.timeout = 0;
+            mApi = api;
+            mListener = listener;
+            mUseRoot = true;
         }
 
         public Worker(int api, boolean useRoot, String command, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.useRoot = useRoot;
-            this.listener = listener;
-            params.context = null;
-            params.commands = new String[] { command };
-            params.timeout = 0;
+            mApi = api;
+            mUseRoot = useRoot;
+            mListener = listener;
+            mBuilder.addCommand(command);
         }
 
-        public Worker(int api, boolean useRoot, CommandBuilder builder, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.useRoot = useRoot;
-            this.listener = listener;
-            params.context = null;
-            params.commands = builder.commands.toArray(new String[builder.commands.size()]);
-            params.timeout = builder.timeout;
+        public Worker(int api, boolean useRoot, ParamBuilder builder, ErrorCode.OutputListener listener) {
+            mApi = api;
+            mUseRoot = useRoot;
+            mListener = listener;
+            mBuilder.sync(builder);
         }
 
-        public Worker(int api, String packageName, String partition, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.useRoot = true;
-            this.listener = listener;
-            params.context = null;
-            params.packages.add(packageName);
-            params.partition = partition;
-            params.timeout = 0;
-        }
-
-        public Worker(int api, String packageName, String partition, String target, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.useRoot = true;
-            this.listener = listener;
-            params.context = null;
-            params.packages.add(packageName);
-            params.partition = partition;
-            params.target = target;
-            params.timeout = 0;
-        }
-
-        public Worker(int api, Context context, List<String> packages, String partition, String target, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.useRoot = true;
-            this.listener = listener;
-            params.context = context;
-            params.packages.addAll(packages);
-            params.partition = partition;
-            params.target = target;
-            params.timeout = 0;
-        }
-
-        public Worker(int api, Context context, List<String> packages, String partition, ErrorCode.OutputListenerWithPackages listener) {
-            this.api = api;
-            this.useRoot = true;
-            this.listenerEx = listener;
-            params.context = context;
-            params.packages.addAll(packages);
-            params.partition = partition;
-            params.timeout = 0;
-        }
-
-        public Worker(int api, Context context, String partition, ErrorCode.OutputListenerWithPackages listener) {
-            this.api = api;
-            this.useRoot = true;
-            this.listenerEx = listener;
-            params.context = context;
-            params.partition = partition;
-            params.timeout = 0;
-        }
-
-        public Worker(int api, List<String> packages, String partition, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.useRoot = true;
-            this.listener = listener;
-            params.context = null;
-            params.packages.addAll(packages);
-            params.partition = partition;
-            params.timeout = 0;
-        }
-
-        public Worker(int api, List<String> packages, String partition, String target, ErrorCode.OutputListener listener) {
-            this.api = api;
-            this.useRoot = true;
-            this.listener = listener;
-            params.context = null;
-            params.packages.addAll(packages);
-            params.partition = partition;
-            params.target = target;
-            params.timeout = 0;
+        public Worker(int api, ParamBuilder builder, ErrorCode.OutputListenerWithPackages listener) {
+            mApi = api;
+            mUseRoot = true;
+            mListenerEx = listener;
+            mBuilder.sync(builder);
         }
 
         @Override
         protected Integer doInBackground(Integer... flags) {
-            exec = new ShellExec(useRoot);
-            int errorCode = exec.callApi(api, params, flags);
+            mExec = new ShellExec(mUseRoot);
+            int errorCode = mExec.callApi(mApi, mBuilder, flags);
             return errorCode;
         }
 
         protected void onPostExecute(Integer errorCode) {
-            if (listener != null) {
-                if (exec.output == null) {
-                    exec.output = new ArrayList<String>();
+            if (mListener != null) {
+                if (mExec.output == null) {
+                    mExec.output = new ArrayList<String>();
                 }
-                listener.onResult(errorCode, exec.output);
+                mListener.onResult(errorCode, mExec.output);
             }
-            else if (listenerEx != null) {
-                if (exec.packages == null) {
-                    exec.packages = new ArrayList<AppManager.PackageInfoEx>();
+            else if (mListenerEx != null) {
+                if (mExec.packages == null) {
+                    mExec.packages = new ArrayList<PackageInfoEx>();
                 }
-                listenerEx.onResult(errorCode, exec.packages);
+                mListenerEx.onResult(errorCode, mExec.packages);
             }
         }
     }
