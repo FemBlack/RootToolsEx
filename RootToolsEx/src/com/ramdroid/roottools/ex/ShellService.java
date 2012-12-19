@@ -145,16 +145,17 @@ public class ShellService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
-        // init shell
-        boolean useRoot = intent.getBooleanExtra("useRoot", true);
-        mShellExec = new ShellExec(useRoot);
+        if (intent != null) {
+            // init shell
+            boolean useRoot = intent.getBooleanExtra("useRoot", true);
+            mShellExec = new ShellExec(useRoot);
 
-        // register intent receiver
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_SEND_SHELL_CMD);
-        mReceiver = new CommandReceiver();
-        registerReceiver(mReceiver, filter);
-
+            // register intent receiver
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(ACTION_SEND_SHELL_CMD);
+            mReceiver = new CommandReceiver();
+            registerReceiver(mReceiver, filter);
+        }
         return START_STICKY;
     }
 
@@ -168,7 +169,7 @@ public class ShellService extends Service {
     private class CommandReceiver extends BroadcastReceiver {
 
         @Override
-        public void onReceive(Context context, Intent intent) {
+        public void onReceive(final Context context, Intent intent) {
             final int api = intent.getIntExtra("api", ShellExec.API_SEND);
             final String cmd = intent.getStringExtra("cmd");
             final ParamBuilder params = intent.getParcelableExtra("params");
@@ -188,7 +189,7 @@ public class ShellService extends Service {
                             }
                         }
                         else {
-                            mShellExec.callApi(api, params);
+                            mShellExec.callApi(api, context, params);
                         }
 
                         if (resultReceiver != null) {
