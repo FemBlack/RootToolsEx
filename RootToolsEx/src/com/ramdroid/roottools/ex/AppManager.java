@@ -59,16 +59,22 @@ public class AppManager {
     public static final int FLAG_IGNORE_ODEXED  = 0x0400;
 
     public static AppManager create(Context context) {
-        return new AppManager(context);
+        return new AppManager(context, true);
+    }
+
+    public static AppManager createWithoutService(Context context) {
+        return new AppManager(context, false);
     }
 
     public void destroy() {
         ShellService.stop(mContext);
     }
 
-    private AppManager(Context context) {
+    private AppManager(Context context, boolean needService) {
         mContext = context;
-        ShellService.start(context, true);
+        if (needService) {
+            ShellService.start(context, true);
+        }
     }
 
     private Context mContext;

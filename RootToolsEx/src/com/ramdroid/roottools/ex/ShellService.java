@@ -17,10 +17,7 @@ package com.ramdroid.roottools.ex;
  */
 
 import android.app.Service;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
+import android.content.*;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.ResultReceiver;
@@ -42,7 +39,6 @@ public class ShellService extends Service {
 
     private CommandReceiver mReceiver;
     private ShellExec mShellExec;
-    private Context mContext;
 
     /**
      * Initializes the {@link ShellService}.
@@ -51,7 +47,10 @@ public class ShellService extends Service {
      * @param useRoot True if you need a root shell.
      */
     public static void start(Context context, boolean useRoot) {
-        context.startService(new Intent(context, ShellService.class).putExtra("useRoot", useRoot));
+        ComponentName result = context.startService(new Intent(context, ShellService.class).putExtra("useRoot", useRoot));
+        if (result == null) {
+            throw new RuntimeException("Could not start ShellService! Did you include it in your AndroidManifest.xml?");
+        }
     }
 
     /**
@@ -189,7 +188,7 @@ public class ShellService extends Service {
                             }
                         }
                         else {
-                            mShellExec.callApi(api, context, params);
+                            mShellExec.callApi(api, context, params, params.getFlags());
                         }
 
                         if (resultReceiver != null) {

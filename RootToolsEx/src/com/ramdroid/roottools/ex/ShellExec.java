@@ -136,6 +136,12 @@ class ShellExec {
 
     public int callApi(int api, Context context, ParamBuilder builder, Integer... flags) {
         int errorCode = ErrorCode.NONE;
+
+        int f = 0;
+        if (flags.length > 0) {
+            f = flags[0];
+        }
+
         if (api == API_EX_APPEXISTSONPARTITION) {
             errorCode = AppManager.Internal.appExistsOnPartition(
                     this,
@@ -157,14 +163,14 @@ class ShellExec {
                     builder.getPackages(),
                     builder.getPartition(),
                     builder.getTarget(),
-                    flags[0]);
+                    f);
         }
         else if (api == API_EX_WIPEAPP) {
             errorCode = AppManager.Internal.wipePackages(
                     this,
                     builder.getPackages(),
                     builder.getPartition(),
-                    flags[0]);
+                    f);
         }
         else if (api == API_EX_GETPACKAGES) {
             errorCode = AppManager.Internal.getPackagesFromPartition(
@@ -172,7 +178,7 @@ class ShellExec {
                     context,
                     builder.getPartition(),
                     builder.getFirstPackage(),
-                    flags[0]);
+                    f);
         }
         clear();
         return errorCode;
