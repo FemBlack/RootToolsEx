@@ -64,6 +64,7 @@ public class ErrorReport {
     private final boolean includeSystemInfo;
     private final boolean includeRunningProcesses;
     private final boolean includePartitionInfo;
+    private final List<String> customInfo;
 
     public ErrorReport(final Builder builder) {
         context = builder.context;
@@ -77,6 +78,7 @@ public class ErrorReport {
         includeSystemInfo = builder.includeSystemInfo;
         includeRunningProcesses = builder.includeRunningProcesses;
         includePartitionInfo = builder.includePartitionInfo;
+        customInfo = builder.customInfo;
     }
 
     /**
@@ -127,6 +129,7 @@ public class ErrorReport {
         private boolean includeSystemInfo;
         private boolean includeRunningProcesses;
         private boolean includePartitionInfo;
+        private List<String> customInfo = new ArrayList<String>();
 
         public Builder(Context context) {
             this.context = context;
@@ -245,6 +248,16 @@ public class ErrorReport {
         }
 
         /**
+         * Add some custom info within the header. Can be called multiple times.
+         * @param line The custom text.
+         * @return Returns the {@link Builder}.
+         */
+        public Builder addCustomInfo(String line) {
+            this.customInfo.add(line);
+            return this;
+        }
+
+        /**
          * @return Returns a configured {@link ErrorReport} class.
          */
         public ErrorReport build() {
@@ -312,6 +325,13 @@ public class ErrorReport {
                         logLines.add("");
                         addLogLines(outputFile, true, logLines);
                     }
+                }
+
+                // add custom info?
+                if (customInfo.size() > 0) {
+                    customInfo.add("");
+                    customInfo.add("");
+                    addLogLines(outputFile, true, customInfo);
                 }
 
                 // run log tool
