@@ -63,6 +63,7 @@ public class ErrorReport {
     private final String logFile;
     private final boolean includeSystemInfo;
     private final boolean includeRunningProcesses;
+    private final boolean includePackages;
     private final boolean includePartitionInfo;
     private final List<String> customInfo;
 
@@ -77,6 +78,7 @@ public class ErrorReport {
         logFile = builder.logFile;
         includeSystemInfo = builder.includeSystemInfo;
         includeRunningProcesses = builder.includeRunningProcesses;
+        includePackages = builder.includePackages;
         includePartitionInfo = builder.includePartitionInfo;
         customInfo = builder.customInfo;
     }
@@ -128,6 +130,7 @@ public class ErrorReport {
         private String logFile;
         private boolean includeSystemInfo;
         private boolean includeRunningProcesses;
+        private boolean includePackages;
         private boolean includePartitionInfo;
         private List<String> customInfo = new ArrayList<String>();
 
@@ -239,6 +242,15 @@ public class ErrorReport {
         }
 
         /**
+         * Include a list of all installed packages.
+         * @return Returns the {@link Builder}.
+         */
+        public Builder includePackages() {
+            this.includePackages = true;
+            return this;
+        }
+
+        /**
          * Include a list of all partitions of the device including disk space statistics.
          * @return Returns the {@link Builder}.
          */
@@ -273,6 +285,7 @@ public class ErrorReport {
             logFile = "errorlog.txt";
             includeSystemInfo = true;
             includeRunningProcesses = false;
+            includePackages = false;
             includePartitionInfo = false;
         }
 
@@ -335,7 +348,7 @@ public class ErrorReport {
                 }
 
                 // run log tool
-                final boolean append = includeSystemInfo || includeRunningProcesses;
+                final boolean append = includeSystemInfo || includeRunningProcesses || includePackages;
                 final String logCommand = logTool + " " + logParams + (append ? " >> " : " > ") + outputFile;
                 errorCode = exec.run(new String[] { logCommand });
                 if (errorCode != ErrorCode.NONE) {
@@ -377,10 +390,10 @@ public class ErrorReport {
             }
 
             if (includeRunningProcesses) {
-                final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-                final List<ActivityManager.RunningAppProcessInfo> runningProcesses = activityManager.getRunningAppProcesses();
                 logLines.add("Running processes:");
                 logLines.add("");
+                final ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+                final List<ActivityManager.RunningAppProcessInfo> runningProcesses = activityManager.getRunningAppProcesses();
                 for (ActivityManager.RunningAppProcessInfo processInfo : runningProcesses) {
                     logLines.add(processInfo.processName + " (" + processInfo.pid + ")");
                 }
@@ -388,7 +401,38 @@ public class ErrorReport {
                 logLines.add("");
             }
 
+            if (includePackages) {
+                logLines.add("Installed packages:");
+                logLines.add("");
+                final PackageManager pm = context.getPackageManager();
+                List<PackageInfo> packages = pm.getInstalledPackages(0);
+                for (PackageInfo pkg : packages) {
+                    logLines.add(
+                            pkg.packageName + " (" +
+                            pkg.versionName + ") - State: " +
+                            getPackageStateString(pm, pkg) + " - " +
+                            pkg.applicationInfo.sourceDir);
+                }
+                logLines.add("");
+                logLines.add("");
+            }
+
             return addLogLines(outputFile, false, logLines);
+        }
+
+        private String getPackageStateString(PackageManager pm, PackageInfo pkg) {
+            String state = "DEFAULT";
+            int componentState = pm.getApplicationEnabledSetting(pkg.packageName);
+            if (componentState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
+                state = "ENABLED";
+            }
+            else if (componentState == PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
+                state = "DISABLED";
+            }
+            else if (componentState == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER) {
+                state = "DISABLED_USER";
+            }
+            return state;
         }
 
         private int addLogLines(String outputFile, boolean append, List<String> logLines) {
