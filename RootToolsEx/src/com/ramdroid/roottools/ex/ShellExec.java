@@ -52,8 +52,6 @@ class ShellExec {
     public ArrayList<String> output = new ArrayList<String>();
     public ArrayList<PackageInfoEx> packages = new ArrayList<PackageInfoEx>();
 
-    private static final String TAG = "ShellExec";
-
     private Shell mShell;
     private boolean mUseRoot;
 
@@ -76,12 +74,12 @@ class ShellExec {
             @Override
             public void output(int id, String line) {
                 if (id == mCommandId && line != null && line.length() > 0) {
-                    Log.d(TAG, "ID " + id + ": " + line);
+                    Debug.log(this, "ID " + id + ": " + line);
                     output.add(line);
                 }
             }
         };
-        Log.d(TAG, "Cmd " + mCommandId + ": " + cmd.getCommand());
+        Debug.log(this, "Cmd " + mCommandId + ": " + cmd.getCommand());
 
         try {
             mShell = RootTools.getShell(mUseRoot);
