@@ -54,6 +54,7 @@ class ShellExec {
 
     private Shell mShell;
     private boolean mUseRoot;
+    private int mErrorCode;
 
     private static int mCommandId = 0;
 
@@ -66,45 +67,55 @@ class ShellExec {
     }
 
     public int run(int timeout, String... command) {
-        int errorCode = ErrorCode.COMMAND_FAILED;
+        mErrorCode = ErrorCode.COMMAND_FAILED;
         mCommandId += 1;
         output.clear();
-        Command cmd = new Command(mCommandId, command) {
+        Command cmd = new Command(mCommandId, timeout, command) {
 
             @Override
-            public void output(int id, String line) {
+            public void commandOutput(int id, String line) {
                 if (id == mCommandId && line != null && line.length() > 0) {
                     Debug.log(this, "ID " + id + ": " + line);
                     output.add(line);
                 }
             }
+
+            @Override
+            public void commandTerminated(int id, String reason) {
+                output.add(reason);
+            }
+
+            @Override
+            public void commandCompleted(int id, int exitCode) {
+                if (exitCode == 0) {
+                    mErrorCode = ErrorCode.NONE;
+                }
+            }
         };
         Debug.log(this, "Cmd " + mCommandId + ": " + cmd.getCommand());
 
+        RootTools.handlerEnabled = false;
         try {
             mShell = RootTools.getShell(mUseRoot);
-            int exitCode;
-            if (timeout > 0) {
-                exitCode = mShell.add(cmd).exitCode(timeout);
-            }
-            else {
-                exitCode = mShell.add(cmd).exitCode();
-            }
-            if (exitCode == 0) {
-                errorCode = ErrorCode.NONE;
-            }
+            mShell.add(cmd).getCommand();
+
         } catch (IOException e) {
             output.add(e.toString());
-        } catch (InterruptedException e) {
-            output.add(e.toString());
-        } catch (TimeoutException e) {
-            output.add(e.toString());
-            errorCode = ErrorCode.TIMEOUT;
         } catch (RootDeniedException e) {
             output.add(e.toString());
-            errorCode = ErrorCode.NO_ROOT_ACCESS;
+            mErrorCode = ErrorCode.NO_ROOT_ACCESS;
+        } catch (TimeoutException e) {
+            output.add(e.toString());
+            mErrorCode = ErrorCode.TIMEOUT;
         }
-        return errorCode;
+
+        try {
+            Thread.sleep(timeout);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return mErrorCode;
     }
 
     public int callApi(int api, ParamBuilder builder, Integer... flags) {
