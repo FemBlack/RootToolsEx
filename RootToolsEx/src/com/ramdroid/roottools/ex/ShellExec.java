@@ -55,6 +55,7 @@ class ShellExec {
     private Shell mShell;
     private boolean mUseRoot;
     private int mErrorCode;
+    private Boolean mCommandFinished;
 
     private static int mCommandId = 0;
 
@@ -68,6 +69,7 @@ class ShellExec {
 
     public int run(int timeout, String... command) {
         mErrorCode = ErrorCode.COMMAND_FAILED;
+        mCommandFinished = false;
         mCommandId += 1;
         output.clear();
         Command cmd = new Command(mCommandId, timeout, command) {
@@ -83,12 +85,18 @@ class ShellExec {
             @Override
             public void commandTerminated(int id, String reason) {
                 output.add(reason);
+                synchronized (mCommandFinished) {
+                    mCommandFinished = true;
+                }
             }
 
             @Override
             public void commandCompleted(int id, int exitCode) {
                 if (exitCode == 0) {
                     mErrorCode = ErrorCode.NONE;
+                }
+                synchronized (mCommandFinished) {
+                    mCommandFinished = true;
                 }
             }
         };
@@ -109,10 +117,18 @@ class ShellExec {
             mErrorCode = ErrorCode.TIMEOUT;
         }
 
-        try {
-            Thread.sleep(timeout);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        int intervals = timeout / 100;
+        for (int i=0; i<intervals; ++i) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+            }
+            synchronized (mCommandFinished) {
+                if (mCommandFinished) {
+                    break;
+                }
+            }
+
         }
 
         return mErrorCode;
