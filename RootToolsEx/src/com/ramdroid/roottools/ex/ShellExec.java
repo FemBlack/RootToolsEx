@@ -117,6 +117,9 @@ class ShellExec {
             mErrorCode = ErrorCode.TIMEOUT;
         }
 
+        if (timeout == 0) {
+            timeout = 5000;
+        }
         int intervals = timeout / 100;
         for (int i=0; i<intervals; ++i) {
             try {
