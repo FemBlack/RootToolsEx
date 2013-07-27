@@ -17,6 +17,7 @@ package com.ramdroid.roottools.ex;
  */
 
 import android.Manifest;
+import android.annotation.TargetApi;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -431,6 +432,9 @@ public class ErrorReport {
             }
             else if (componentState == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER) {
                 state = "DISABLED_USER";
+            }
+            else if (componentState == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED) {
+                state = "DISABLED_UNTIL_USED";
             }
             return state;
         }
