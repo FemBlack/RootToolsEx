@@ -6,4 +6,6 @@
     <application android:label="RootToolsEx">
 
     </application>
+
+    <uses-sdk android:minSdkVersion="8" />
 </manifest>

@@ -1,0 +1,50 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:0.5.+'
+    }
+}
+apply plugin: 'android-library'
+
+repositories {
+    maven {
+        url 'https://raw.github.com/ramdroid/mvn-repo/master/experimental'
+    }
+}
+
+dependencies {
+    compile 'com.stericson.RootTools:RootTools_sdk3_generic:3.2.0'
+}
+
+android {
+    compileSdkVersion 18
+    buildToolsVersion "18.0.1"
+
+    defaultConfig {
+        minSdkVersion 8
+        targetSdkVersion 18
+    }
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            res.srcDirs = ['res']
+        }
+    }
+
+}
+
+apply plugin: 'maven'
+
+group = 'com.ramdroid.roottools.ex'
+version = '1.0'
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            repository(url: "file://localhost/home/ramdroid/projects/github/mvn-repo/experimental")
+        }
+    }
+}
