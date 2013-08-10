@@ -188,7 +188,7 @@ public class ShellService extends Service {
                             }
                         }
                         else {
-                            mShellExec.callApi(api, context, params, params.getFlags());
+                            errorCode = mShellExec.callApi(api, context, params, params.getFlags());
                         }
 
                         if (resultReceiver != null) {

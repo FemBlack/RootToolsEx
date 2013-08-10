@@ -521,7 +521,8 @@ public class AppManager {
             PackageManager pm = context.getPackageManager();
             try {
                 ApplicationInfo ai = pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA);
-                boolean found = (ai.sourceDir.startsWith(getPartitionPath(partition)));
+                boolean found = (ai.sourceDir.startsWith(getPartitionPath(partition)) ||
+                        (partition.equals(PARTITION_DATA) && ai.sourceDir.startsWith("/mnt/asec")));
                 if (found) {
                     result.errorCode = ErrorCode.NONE;
                     result.filename = ai.sourceDir;
@@ -668,6 +669,10 @@ public class AppManager {
                 ResultSet result = packageFitsOnPartition(exec, context, packageName, sourcePartition, targetPartition);
                 if (result.errorCode != ErrorCode.NONE) {
                     errorCode = result.errorCode;
+                    break;
+                }
+                else if (result.filename.startsWith("/mnt/asec")) {
+                    errorCode = ErrorCode.MNT_ASEC_NOT_SUPPORTED;
                     break;
                 }
                 table.put(packageName, result.filename);

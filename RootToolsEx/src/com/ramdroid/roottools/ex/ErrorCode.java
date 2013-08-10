@@ -40,6 +40,7 @@ public class ErrorCode {
     public static final int ALREADY_EXISTING        = 14;
     public static final int INTERNAL                = 15;
     public static final int ODEX_NOT_SUPPORTED      = 16;
+    public static final int MNT_ASEC_NOT_SUPPORTED  = 17;
 
     /**
      * Interface to receive the error code result.
